@@ -24,7 +24,13 @@ const (
 	CmdRefs    = "refs"
 	CmdStatus  = "status"
 	CmdIDs     = "ids"
+	CmdVersion = "version"
 )
+
+// VersionInfo is the output of the version command.
+type VersionInfo struct {
+	Version string `json:"version"`
+}
 
 // Request is one parsed command line.
 type Request struct {
@@ -35,6 +41,7 @@ type Request struct {
 	JSON       bool
 	FilesOnly  bool   // get: print only the paths of matching files
 	ConfigPath string // explicit .mdnav.json; "" means discover from the working directory
+	Version    string // program version, for the version command
 }
 
 // ErrNoMatch is returned when a query matched nothing, so the caller can set
@@ -43,6 +50,13 @@ var ErrNoMatch = errors.New("no match")
 
 // Run executes req and writes the result to w.
 func Run(ctx context.Context, req Request, w io.Writer) error {
+	if req.Command == CmdVersion {
+		if req.JSON {
+			return render.JSON(w, VersionInfo{Version: req.Version})
+		}
+		_, err := fmt.Fprintf(w, "mdnav %s\n", req.Version)
+		return err
+	}
 	cfg, err := loadConfig(req.ConfigPath)
 	if err != nil {
 		return err

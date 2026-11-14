@@ -45,9 +45,8 @@ type GetResult struct {
 type target struct {
 	doc     *markdown.Doc
 	block   markdown.Block
-	section int    // heading index when the target is a whole section, else -1
-	focus   int    // matched line, used to centre a cut block
-	label   string // overrides the default description
+	section int // heading index when the target is a whole section, else -1
+	focus   int // matched line, used to centre a cut block
 }
 
 // Get resolves q in this order: exact identifier, § number, heading text,

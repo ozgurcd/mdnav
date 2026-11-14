@@ -51,6 +51,22 @@ func TestParseErrors(t *testing.T) {
 	}
 }
 
+func TestVersion(t *testing.T) {
+	for _, args := range [][]string{{"version"}, {"--version"}} {
+		var out, errb bytes.Buffer
+		if code := run(args, &out, &errb); code != 0 || out.String() != "mdnav "+version+"\n" {
+			t.Fatalf("%q: %d %q %q", args, code, out.String(), errb.String())
+		}
+	}
+	var out, errb bytes.Buffer
+	if code := run([]string{"version", "--json"}, &out, &errb); code != 0 || out.String() != "{\n  \"version\": \""+version+"\"\n}\n" {
+		t.Fatalf("json: %d %q", code, out.String())
+	}
+	if _, _, err := parse([]string{"version", "extra"}); err == nil {
+		t.Fatal("version with an argument should fail")
+	}
+}
+
 func TestRunExitCodes(t *testing.T) {
 	var out, errb bytes.Buffer
 	if code := run([]string{"help"}, &out, &errb); code != 0 || !strings.Contains(out.String(), "Usage:") {

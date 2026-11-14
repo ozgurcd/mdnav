@@ -14,6 +14,14 @@ $ mdnav get D4 internal/nav/testdata
 //   internal/nav/testdata/05-engine.md:15 ### Fence (D4)
 ```
 
+## Install
+
+```
+brew install --cask ozgurcd/tap/mdnav
+# or: go install github.com/ozgurcd/mdnav/cmd/mdnav@latest
+mdnav --version
+```
+
 ## Commands
 
 ```
@@ -22,6 +30,7 @@ mdnav outline <file> [--depth N] [--max-lines N] [--json]
 mdnav refs <id> [paths...] [--include-def] [--full] [--limit N] [--json]
 mdnav status <id> [paths...] [--full] [--limit N] [--json]
 mdnav ids [paths...] [--pattern NAME] [--limit N] [--json]
+mdnav version [--json]
 ```
 
 Paths default to the current directory, searched recursively for `*.md`,
@@ -118,11 +127,27 @@ Go 1.27.4, standard library only.
 
 ```
 CGO_ENABLED=0 go build ./cmd/mdnav
-CGO_ENABLED=0 go vet ./...
-CGO_ENABLED=0 go test ./...
+make verify          # fmt, test, vet, staticcheck, govulncheck, mod tidy
 ```
+
+## Release
+
+1. Set `internal/buildinfo.Version` and add a `## vX.Y.Z — YYYY-MM-DD`
+   section to `RELEASE_NOTES.md`; merge to main.
+2. Push an annotated tag on that commit: `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.
+
+`.github/workflows/release.yml` then checks the tag against the source
+version (tests are not re-run: the commit passed them on its pull request),
+publishes the GitHub release with GoReleaser
+(darwin and linux, amd64 and arm64), and pushes the cask to
+`ozgurcd/homebrew-tap` as `Casks/mdnav.rb`. It needs the repository secret
+`HOMEBREW_TAP_GITHUB_TOKEN` with push access to the tap.
 
 Layout: `cmd/mdnav` parses flags; `internal/markdown` parses documents,
 `internal/idpat` matches ids, `internal/config` loads `.mdnav.json`,
 `internal/source` finds and reads files, `internal/nav` answers queries,
 `internal/render` prints text or JSON, `internal/app` wires them together.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
