@@ -127,7 +127,7 @@ Go 1.27.4, standard library only.
 
 ```
 CGO_ENABLED=0 go build ./cmd/mdnav
-make verify          # fmt, build, test, vet, staticcheck, govulncheck, mod tidy
+make verify          # fmt, test, vet, staticcheck, govulncheck, mod tidy
 ```
 
 ## Release
@@ -137,7 +137,8 @@ make verify          # fmt, build, test, vet, staticcheck, govulncheck, mod tidy
 2. Push an annotated tag on that commit: `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.
 
 `.github/workflows/release.yml` then checks the tag against the source
-version, runs `make verify`, publishes the GitHub release with GoReleaser
+version (tests are not re-run: the commit passed them on its pull request),
+publishes the GitHub release with GoReleaser
 (darwin and linux, amd64 and arm64), and pushes the cask to
 `ozgurcd/homebrew-tap` as `Casks/mdnav.rb`. It needs the repository secret
 `HOMEBREW_TAP_GITHUB_TOKEN` with push access to the tap.
@@ -146,3 +147,7 @@ Layout: `cmd/mdnav` parses flags; `internal/markdown` parses documents,
 `internal/idpat` matches ids, `internal/config` loads `.mdnav.json`,
 `internal/source` finds and reads files, `internal/nav` answers queries,
 `internal/render` prints text or JSON, `internal/app` wires them together.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
