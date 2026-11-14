@@ -1,0 +1,64 @@
+version: 2
+project_name: mdnav
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/mdnav
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w -X main.version=v{{.Version}}
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+release:
+  replace_existing_artifacts: false
+
+homebrew_casks:
+  - name: mdnav
+    # The release workflow checks public URLs, prepares structured postflight
+    # steps, then publishes and verifies the exact tap copy.
+    skip_upload: true
+    repository:
+      owner: ozgurcd
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/ozgurcd/mdnav"
+    description: "Navigate Markdown by id, section number, heading or text"
+    binaries:
+      - mdnav
+    url:
+      template: "https://github.com/ozgurcd/mdnav/releases/download/v#{version}/{{ .ArtifactName }}"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mdnav"]
+          end
