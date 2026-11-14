@@ -31,9 +31,10 @@ release-notes-check:
 release-check:
 	go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) check
 
-verify: fmt-check release-notes-check
-	go version
-	go build ./...
+# Each step checks something no other step does: vet and test compile every
+# package, so there is no separate build; release notes are checked by the
+# release workflow, which extracts them.
+verify: fmt-check
 	go test ./... -count=1 -timeout=120s
 	go vet ./...
 	STATICCHECK_CACHE=$(CURDIR)/.cache/staticcheck staticcheck ./...
