@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ozgurcd/mdnav/internal/app"
+	"github.com/ozgurcd/mdnav/internal/buildinfo"
 	"github.com/ozgurcd/mdnav/internal/nav"
 )
 
@@ -26,6 +27,7 @@ Usage:
   mdnav refs <id> [paths...] [--include-def] [--full] [--limit N] [--json]
   mdnav status <id> [paths...] [--full] [--limit N] [--json]
   mdnav ids [paths...] [--pattern NAME] [--limit N] [--json]
+  mdnav version [--json]          (also: mdnav --version)
 
 Paths default to the current directory, searched recursively for *.md files,
 skipping .git and git-ignored paths. Flags may come before or after arguments.
@@ -40,6 +42,10 @@ Common flags:
 
 Exit status: 0 on success, 1 when nothing matched, 2 on usage errors or failure.
 `
+
+// version is the source version; release builds override it with -ldflags
+// "-X main.version=vX.Y.Z".
+var version = buildinfo.Version
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -81,8 +87,12 @@ func parse(args []string) (app.Request, time.Duration, error) {
 		return req, 0, errors.New("missing command")
 	}
 	req.Command = args[0]
-	if req.Command == "help" || req.Command == "-h" || req.Command == "--help" {
+	req.Version = version
+	switch req.Command {
+	case "help", "-h", "--help":
 		return req, 0, flag.ErrHelp
+	case "--version":
+		req.Command = app.CmdVersion
 	}
 
 	fs := flag.NewFlagSet("mdnav "+req.Command, flag.ContinueOnError)
@@ -116,6 +126,7 @@ func parse(args []string) (app.Request, time.Duration, error) {
 	case app.CmdIDs:
 		fs.StringVar(&o.Pattern, "pattern", "", "")
 		fs.IntVar(&o.Limit, "limit", nav.DefaultListLimit, "")
+	case app.CmdVersion:
 	default:
 		return req, 0, fmt.Errorf("unknown command %q", req.Command)
 	}
@@ -129,6 +140,9 @@ func parse(args []string) (app.Request, time.Duration, error) {
 			return req, 0, fmt.Errorf("%s: missing argument", req.Command)
 		}
 		req.Arg, pos = pos[0], pos[1:]
+	}
+	if req.Command == app.CmdVersion && len(pos) > 0 {
+		return req, 0, fmt.Errorf("version takes no arguments, got %q", pos)
 	}
 	if req.Command == app.CmdOutline && len(pos) > 0 {
 		return req, 0, fmt.Errorf("outline takes one file, got extra %q", pos)
