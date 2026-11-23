@@ -74,6 +74,7 @@ type Ref struct {
 	Path  string `json:"path"`
 	Line  int    `json:"line"`
 	Where string `json:"where,omitzero"`
+	Hash  string `json:"hash,omitzero"` // BlockHash of the block an edit at Line would target
 	Text  string `json:"text"`
 }
 

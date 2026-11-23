@@ -22,6 +22,7 @@ type StatusHit struct {
 	Path        string   `json:"path"`
 	Line        int      `json:"line"`
 	Where       string   `json:"where,omitzero"`
+	Hash        string   `json:"hash"` // BlockHash of the block an edit at Line would target
 	Reason      string   `json:"reason"`
 	Superseders []string `json:"superseders,omitzero"` // ids on the same line that appear to supersede it
 	Text        string   `json:"text"`
@@ -101,7 +102,7 @@ func (n *Navigator) Status(ctx context.Context, id string, o Options) (StatusRes
 
 func (n *Navigator) statusHit(d *markdown.Doc, ln int, id string, occ [][2]int) (StatusHit, bool) {
 	line := d.Line(ln)
-	h := StatusHit{Path: d.Path, Line: ln, Where: n.blockWhere(d, ln)}
+	h := StatusHit{Path: d.Path, Line: ln, Where: n.blockWhere(d, ln), Hash: spanHash(d, ln)}
 
 	// "superseded (by) ..." clauses name superseders; mentions of id inside
 	// them say id supersedes something else.

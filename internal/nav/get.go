@@ -27,6 +27,7 @@ type Block struct {
 	End     int            `json:"end"`
 	Kind    string         `json:"kind"`
 	Where   string         `json:"where,omitzero"`
+	Hash    string         `json:"hash"` // BlockHash of Start-End, also when Lines are cut
 	Lines   []Line         `json:"lines,omitzero"`
 	Outline []OutlineEntry `json:"outline,omitzero"`
 	Note    string         `json:"note,omitzero"`
@@ -136,14 +137,14 @@ func (n *Navigator) byID(ctx context.Context, id string) ([]target, []Ref, error
 				rows = append(rows, target{doc: d, block: b, section: -1, focus: b.Start})
 			case b.Kind == markdown.KindHeading && n.ids.Contains(d.Headings[b.Heading].Text, id):
 				heads = append(heads, target{doc: d, block: b, section: b.Heading, focus: b.Start})
-				also = append(also, Ref{Path: d.Path, Line: b.Start, Where: headingTrail(d, b.Start), Text: d.Line(b.Start)})
+				also = append(also, Ref{Path: d.Path, Line: b.Start, Where: headingTrail(d, b.Start), Hash: spanHash(d, b.Start), Text: d.Line(b.Start)})
 			}
 		}
 	}
 	if len(rows) > 0 {
 		best, others := n.preferRegister(rows, id)
 		for _, t := range others {
-			also = append(also, Ref{Path: t.doc.Path, Line: t.block.Start, Where: "other row with this id",
+			also = append(also, Ref{Path: t.doc.Path, Line: t.block.Start, Where: "other row with this id", Hash: spanHash(t.doc, t.block.Start),
 				Text: snippet(t.doc.Line(t.block.Start), 0, 0, false)})
 		}
 		return best, also, nil
@@ -266,7 +267,7 @@ func (n *Navigator) byText(ctx context.Context, match func(string) bool, skipCod
 // render turns a target into printable lines, applying the line cap.
 func (n *Navigator) render(t target, maxLines int) Block {
 	d, b := t.doc, t.block
-	out := Block{Path: d.Path, Start: b.Start, End: b.End}
+	out := Block{Path: d.Path, Start: b.Start, End: b.End, Hash: BlockHash(d, b.Start, b.End)}
 	if t.section >= 0 {
 		return renderSection(d, t.section, maxLines)
 	}
@@ -304,7 +305,8 @@ func (n *Navigator) render(t target, maxLines int) Block {
 
 func renderSection(d *markdown.Doc, h, maxLines int) Block {
 	hd := d.Headings[h]
-	out := Block{Path: d.Path, Start: hd.Line, End: hd.End, Kind: "section", Where: where(trailOf(d, h), "")}
+	out := Block{Path: d.Path, Start: hd.Line, End: hd.End, Kind: "section", Where: where(trailOf(d, h), ""),
+		Hash: BlockHash(d, hd.Line, hd.End)}
 	size := hd.End - hd.Line + 1
 	first, last := nonBlankRange(d)
 	switch {

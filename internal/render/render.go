@@ -30,10 +30,16 @@ func span(start, end int) string {
 	return fmt.Sprintf("%d-%d", start, end)
 }
 
-func header(path string, start, end int, where string) string {
+// header is the gograph-style first line of a block: "// path:start-end
+// (where) #hash". The hash, when given, is the nav.BlockHash an edit can pass
+// as --expect.
+func header(path string, start, end int, where, hash string) string {
 	h := fmt.Sprintf("// %s:%s", path, span(start, end))
 	if where != "" {
 		h += " (" + where + ")"
+	}
+	if hash != "" {
+		h += " #" + hash
 	}
 	return h
 }
@@ -48,7 +54,7 @@ func Get(w io.Writer, r nav.GetResult) error {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString(header(blk.Path, blk.Start, blk.End, blk.Where) + "\n")
+		b.WriteString(header(blk.Path, blk.Start, blk.End, blk.Where, blk.Hash) + "\n")
 		if blk.Note != "" {
 			b.WriteString("// " + blk.Note + "\n")
 		}
@@ -63,7 +69,7 @@ func Get(w io.Writer, r nav.GetResult) error {
 	if len(r.SeeAlso) > 0 {
 		b.WriteString("\n// see also (headings and other table rows with this id):\n")
 		for _, ref := range r.SeeAlso {
-			fmt.Fprintf(&b, "//   %s:%d %s\n", ref.Path, ref.Line, ref.Text)
+			fmt.Fprintf(&b, "//   %s:%d%s %s\n", ref.Path, ref.Line, hashSuffix(ref.Hash), ref.Text)
 		}
 	}
 	_, err := io.WriteString(w, b.String())
@@ -95,7 +101,7 @@ func writeOutline(b *strings.Builder, entries []nav.OutlineEntry) {
 func Outline(w io.Writer, r nav.OutlineResult) error {
 	var b strings.Builder
 	end := max(r.Lines, 1)
-	b.WriteString(header(r.Path, 1, end, "outline") + "\n")
+	b.WriteString(header(r.Path, 1, end, "outline", "") + "\n")
 	if r.Note != "" {
 		b.WriteString("// " + r.Note + "\n")
 	}
@@ -137,9 +143,9 @@ func Refs(w io.Writer, r nav.RefsResult) error {
 func writeRefs(b *strings.Builder, refs []nav.Ref) {
 	for _, ref := range refs {
 		if ref.Where != "" {
-			fmt.Fprintf(b, "%d: [§ %s] %s\n", ref.Line, ref.Where, ref.Text)
+			fmt.Fprintf(b, "%d%s: [§ %s] %s\n", ref.Line, hashSuffix(ref.Hash), ref.Where, ref.Text)
 		} else {
-			fmt.Fprintf(b, "%d: %s\n", ref.Line, ref.Text)
+			fmt.Fprintf(b, "%d%s: %s\n", ref.Line, hashSuffix(ref.Hash), ref.Text)
 		}
 	}
 }
@@ -153,7 +159,7 @@ func Status(w io.Writer, r nav.StatusResult) error {
 		fmt.Fprintf(&b, "// defined at %s:%d\n", d.Path, d.Line)
 	}
 	for _, h := range r.Hits {
-		b.WriteString("\n" + header(h.Path, h.Line, h.Line, h.Where) + "\n")
+		b.WriteString("\n" + header(h.Path, h.Line, h.Line, h.Where, h.Hash) + "\n")
 		line := "// " + h.Reason
 		if len(h.Superseders) > 0 {
 			line += "; superseding id on this line: " + strings.Join(h.Superseders, ", ")
@@ -185,4 +191,12 @@ func IDs(w io.Writer, r nav.IDsResult) error {
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// hashSuffix renders a block hash as " #hash", or "" when there is none.
+func hashSuffix(hash string) string {
+	if hash == "" {
+		return ""
+	}
+	return " #" + hash
 }

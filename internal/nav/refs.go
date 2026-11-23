@@ -45,7 +45,7 @@ func (n *Navigator) Refs(ctx context.Context, id string, o Options) (RefsResult,
 			if len(hits) == 0 {
 				continue
 			}
-			ref := Ref{Path: d.Path, Line: ln, Where: headingTrail(d, ln), Text: snippet(d.Line(ln), hits[0][0], hits[0][1], o.Full)}
+			ref := Ref{Path: d.Path, Line: ln, Where: headingTrail(d, ln), Hash: spanHash(d, ln), Text: snippet(d.Line(ln), hits[0][0], hits[0][1], o.Full)}
 			if !o.IncludeDef && isDefRow(d, ln, id) {
 				ref.Text = snippet(d.Line(ln), hits[0][0], hits[0][1], false)
 				res.Excluded = append(res.Excluded, ref)

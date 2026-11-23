@@ -37,6 +37,37 @@ func TestGetHeaderAndNotes(t *testing.T) {
 	}
 }
 
+func TestHashesInTextOutput(t *testing.T) {
+	var buf bytes.Buffer
+	err := Get(&buf, nav.GetResult{
+		Blocks:  []nav.Block{{Path: "a.md", Start: 3, End: 3, Where: "§ A > paragraph", Hash: "0123456789ab", Lines: []nav.Line{{N: 3, Text: "x"}}}},
+		SeeAlso: []nav.Ref{{Path: "b.md", Line: 7, Hash: "ba9876543210", Text: "## B (K1)"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"// a.md:3 (§ A > paragraph) #0123456789ab\nx\n",
+		"//   b.md:7 #ba9876543210 ## B (K1)\n",
+	} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("missing %q in:\n%s", want, buf.String())
+		}
+	}
+
+	buf.Reset()
+	err = Refs(&buf, nav.RefsResult{ID: "K1", Total: 2, Files: []nav.RefFile{{Path: "a.md", Refs: []nav.Ref{
+		{Line: 4, Where: "A", Hash: "0123456789ab", Text: "see K1"},
+		{Line: 9, Text: "no heading K1"},
+	}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "4 #0123456789ab: [§ A] see K1\n9: no heading K1\n"; !strings.Contains(buf.String(), want) {
+		t.Errorf("refs output:\n%s\nwant to contain:\n%s", buf.String(), want)
+	}
+}
+
 func TestNoMatch(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Get(&buf, nav.GetResult{Query: "zz"}); err != nil {
