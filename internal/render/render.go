@@ -11,6 +11,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/ozgurcd/mdnav/internal/edit"
 	"github.com/ozgurcd/mdnav/internal/nav"
 )
 
@@ -199,4 +200,43 @@ func hashSuffix(hash string) string {
 		return ""
 	}
 	return " #" + hash
+}
+
+// Edit writes the result of an edit command: for each change, a header for
+// the block as it is now (with the hash to pass as the next --expect), the
+// removed lines with "-" and the added lines with "+", then whether the file
+// was written.
+func Edit(w io.Writer, r edit.Result) error {
+	var b strings.Builder
+	for _, c := range r.Changes {
+		switch {
+		case len(c.Added) == 0:
+			b.WriteString(header(r.Path, c.OldStart, c.OldEnd, c.Where, c.OldHash) + "  [" + c.Op + "d]\n")
+		default:
+			note := c.Op
+			switch c.Op {
+			case edit.OpInsertAfter, edit.OpInsertBefore, edit.OpAddRow:
+				note += fmt.Sprintf(" at %s:%s, anchor was #%s", r.Path, span(c.OldStart, c.OldEnd), c.OldHash)
+			default:
+				note += " of #" + c.OldHash
+			}
+			b.WriteString(header(r.Path, c.NewStart, c.NewEnd, c.NewWhere, c.NewHash) + "  [" + note + "]\n")
+		}
+		for _, l := range c.Removed {
+			b.WriteString("-" + l + "\n")
+		}
+		for _, l := range c.Added {
+			b.WriteString("+" + l + "\n")
+		}
+	}
+	switch {
+	case r.DryRun:
+		b.WriteString("// dry run: nothing written\n")
+	case r.Written:
+		b.WriteString("// written\n")
+	default:
+		b.WriteString("// no change\n")
+	}
+	_, err := io.WriteString(w, b.String())
+	return err
 }

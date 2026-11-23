@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ozgurcd/mdnav/internal/edit"
 	"github.com/ozgurcd/mdnav/internal/nav"
 )
 
@@ -86,5 +87,22 @@ func TestJSON(t *testing.T) {
 	want := "{\n  \"path\": \"a.md\",\n  \"line\": 2,\n  \"text\": \"x\"\n}\n"
 	if buf.String() != want {
 		t.Fatalf("got %q", buf.String())
+	}
+}
+
+func TestEditOutput(t *testing.T) {
+	var buf bytes.Buffer
+	err := Edit(&buf, edit.Result{Path: "a.md", Written: true, Changes: []edit.Change{
+		{Op: "sub", OldStart: 9, OldEnd: 9, OldHash: "aaaaaaaaaaaa", Removed: []string{"| K | a |"},
+			NewStart: 9, NewEnd: 9, NewHash: "bbbbbbbbbbbb", NewWhere: "§ A > table row K", Added: []string{"| K | b |"}},
+		{Op: "delete", OldStart: 12, OldEnd: 12, OldHash: "cccccccccccc", Where: "§ A > paragraph", Removed: []string{"gone"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "// a.md:9 (§ A > table row K) #bbbbbbbbbbbb  [sub of #aaaaaaaaaaaa]\n-| K | a |\n+| K | b |\n" +
+		"// a.md:12 (§ A > paragraph) #cccccccccccc  [deleted]\n-gone\n// written\n"
+	if buf.String() != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", buf.String(), want)
 	}
 }

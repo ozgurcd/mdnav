@@ -16,6 +16,8 @@ import (
 
 	"github.com/ozgurcd/mdnav/internal/app"
 	"github.com/ozgurcd/mdnav/internal/buildinfo"
+	"github.com/ozgurcd/mdnav/internal/edit"
+	"github.com/ozgurcd/mdnav/internal/markdown"
 	"github.com/ozgurcd/mdnav/internal/nav"
 )
 
@@ -29,6 +31,16 @@ Usage:
   mdnav ids [paths...] [--pattern NAME] [--limit N] [--json]
   mdnav version [--json]          (also: mdnav --version)
 
+Edit (one block, addressed like get or as path:line; writes unless --dry-run):
+  mdnav sub <target> <old> <new> [paths...] [--expect H]       replace the one occurrence of <old>
+  mdnav set <target> <value> --col HEADER [--old V] [--expect H] [paths...]   set a table cell
+  mdnav replace <target> --from FILE|- (--expect H | --force) [paths...]       replace the block
+  mdnav insert (--before|--after) <target> --from FILE|- [--expect H] [paths...]
+  mdnav delete <target> (--expect H | --force) [paths...]
+  mdnav add-row <target> --cells 'a|b|c' [--expect H] [paths...]  append a row to the table
+  mdnav apply EDITS.json|-                                       several edits to one file, all or nothing
+  Every edit takes --dry-run and --json. H is the #hash get prints for the block.
+
 Paths default to the current directory, searched recursively for *.md files,
 skipping .git and git-ignored paths. Flags may come before or after arguments.
 
@@ -40,7 +52,8 @@ Common flags:
   --config FILE   identifier patterns (default: .mdnav.json in . or a parent)
   --timeout D     give up after this long (default 30s)
 
-Exit status: 0 on success, 1 when nothing matched, 2 on usage errors or failure.
+Exit status: 0 on success, 1 when nothing matched, 2 on usage errors or failure,
+3 when an edit's --expect or --old no longer matches the file.
 `
 
 // version is the source version; release builds override it with -ldflags
@@ -66,11 +79,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	req.Stdin = os.Stdin
 	switch err := app.Run(ctx, req, stdout); {
 	case err == nil:
 		return 0
 	case errors.Is(err, app.ErrNoMatch):
 		return 1
+	case errors.Is(err, nav.ErrNoTarget):
+		fmt.Fprintf(stderr, "mdnav: %v\n", err)
+		return 1
+	case errors.Is(err, edit.ErrStale):
+		fmt.Fprintf(stderr, "mdnav: %v\n", err)
+		return 3
 	case errors.Is(err, context.DeadlineExceeded):
 		fmt.Fprintf(stderr, "mdnav: timed out after %s\n", timeout)
 		return 2
@@ -103,6 +123,7 @@ func parse(args []string) (app.Request, time.Duration, error) {
 	o := &req.Options
 
 	var wantArg bool
+	var ef *editOpts
 	switch req.Command {
 	case app.CmdGet:
 		wantArg = true
@@ -127,6 +148,8 @@ func parse(args []string) (app.Request, time.Duration, error) {
 		fs.StringVar(&o.Pattern, "pattern", "", "")
 		fs.IntVar(&o.Limit, "limit", nav.DefaultListLimit, "")
 	case app.CmdVersion:
+	case app.CmdSub, app.CmdSet, app.CmdReplace, app.CmdInsert, app.CmdDelete, app.CmdAddRow, app.CmdApply:
+		ef = editFlags(fs, &req)
 	default:
 		return req, 0, fmt.Errorf("unknown command %q", req.Command)
 	}
@@ -134,6 +157,11 @@ func parse(args []string) (app.Request, time.Duration, error) {
 	pos, err := parseInterspersed(fs, args[1:])
 	if err != nil {
 		return req, 0, err
+	}
+	if ef != nil {
+		if pos, err = finishEdit(fs, &req, ef, pos); err != nil {
+			return req, 0, err
+		}
 	}
 	if wantArg {
 		if len(pos) == 0 {
@@ -192,4 +220,109 @@ func isSet(fs *flag.FlagSet, name string) bool {
 		}
 	})
 	return set
+}
+
+// editOpts holds edit flags that need checking after parsing.
+type editOpts struct {
+	old, before, after, cells string
+}
+
+// editFlags registers the flags of an edit command.
+func editFlags(fs *flag.FlagSet, req *app.Request) *editOpts {
+	ef := &editOpts{}
+	fs.BoolVar(&req.DryRun, "dry-run", false, "")
+	if req.Command == app.CmdApply {
+		return ef
+	}
+	fs.StringVar(&req.Edit.Expect, "expect", "", "")
+	switch req.Command {
+	case app.CmdSet:
+		fs.StringVar(&req.Edit.Column, "col", "", "")
+		fs.StringVar(&ef.old, "old", "", "")
+	case app.CmdReplace:
+		fs.StringVar(&req.From, "from", "", "")
+		fs.BoolVar(&req.Edit.Force, "force", false, "")
+	case app.CmdInsert:
+		fs.StringVar(&ef.before, "before", "", "")
+		fs.StringVar(&ef.after, "after", "", "")
+		fs.StringVar(&req.From, "from", "", "")
+	case app.CmdDelete:
+		fs.BoolVar(&req.Edit.Force, "force", false, "")
+	case app.CmdAddRow:
+		fs.StringVar(&ef.cells, "cells", "", "")
+	}
+	return ef
+}
+
+// finishEdit fills req.Edit from the positional arguments and checked flags,
+// and returns the remaining arguments (the paths).
+func finishEdit(fs *flag.FlagSet, req *app.Request, ef *editOpts, pos []string) ([]string, error) {
+	need := func(n int, what string) error {
+		if len(pos) < n {
+			return fmt.Errorf("%s: missing %s", req.Command, what)
+		}
+		return nil
+	}
+	op := &req.Edit
+	switch req.Command {
+	case app.CmdSub:
+		if err := need(3, "<target> <old> <new>"); err != nil {
+			return nil, err
+		}
+		old := pos[1]
+		op.Op, op.Target, op.Old, op.New, pos = edit.OpSub, pos[0], &old, pos[2], pos[3:]
+	case app.CmdSet:
+		if err := need(2, "<target> <value>"); err != nil {
+			return nil, err
+		}
+		if op.Column == "" {
+			return nil, errors.New("set: --col <header> is required")
+		}
+		if isSet(fs, "old") {
+			old := ef.old
+			op.Old = &old
+		}
+		op.Op, op.Target, op.Value, pos = edit.OpSet, pos[0], pos[1], pos[2:]
+	case app.CmdReplace, app.CmdDelete, app.CmdAddRow:
+		if err := need(1, "<target>"); err != nil {
+			return nil, err
+		}
+		op.Target, pos = pos[0], pos[1:]
+		switch req.Command {
+		case app.CmdReplace:
+			op.Op = edit.OpReplace
+			if req.From == "" {
+				return nil, errors.New("replace: --from FILE (or - for standard input) is required")
+			}
+		case app.CmdDelete:
+			op.Op = edit.OpDelete
+		case app.CmdAddRow:
+			op.Op = edit.OpAddRow
+			if !isSet(fs, "cells") {
+				return nil, errors.New("add-row: --cells 'a|b|c' is required")
+			}
+			op.Cells = markdown.SplitCells(ef.cells)
+		}
+	case app.CmdInsert:
+		switch {
+		case (ef.before == "") == (ef.after == ""):
+			return nil, errors.New("insert: give exactly one of --before <target> or --after <target>")
+		case ef.before != "":
+			op.Op, op.Target = edit.OpInsertBefore, ef.before
+		default:
+			op.Op, op.Target = edit.OpInsertAfter, ef.after
+		}
+		if req.From == "" {
+			return nil, errors.New("insert: --from FILE (or - for standard input) is required")
+		}
+	case app.CmdApply:
+		if len(pos) != 1 {
+			return nil, errors.New("apply: give exactly one edits file (or - for standard input)")
+		}
+		req.Arg, pos = pos[0], nil
+	}
+	if req.Edit.Force && req.Edit.Expect != "" {
+		return nil, errors.New("--force and --expect exclude each other")
+	}
+	return pos, nil
 }

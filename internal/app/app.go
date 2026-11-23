@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/ozgurcd/mdnav/internal/config"
+	"github.com/ozgurcd/mdnav/internal/edit"
 	"github.com/ozgurcd/mdnav/internal/idpat"
 	"github.com/ozgurcd/mdnav/internal/nav"
 	"github.com/ozgurcd/mdnav/internal/render"
@@ -25,6 +26,14 @@ const (
 	CmdStatus  = "status"
 	CmdIDs     = "ids"
 	CmdVersion = "version"
+
+	CmdSub     = "sub"
+	CmdSet     = "set"
+	CmdReplace = "replace"
+	CmdInsert  = "insert"
+	CmdDelete  = "delete"
+	CmdAddRow  = "add-row"
+	CmdApply   = "apply"
 )
 
 // VersionInfo is the output of the version command.
@@ -42,6 +51,12 @@ type Request struct {
 	FilesOnly  bool   // get: print only the paths of matching files
 	ConfigPath string // explicit .mdnav.json; "" means discover from the working directory
 	Version    string // program version, for the version command
+
+	// Edit commands.
+	Edit   edit.Op   // the operation; Lines are read from From
+	From   string    // replace, insert: file with the new lines, "-" for standard input
+	DryRun bool      // report the change, write nothing
+	Stdin  io.Reader // standard input, for From "-"
 }
 
 // ErrNoMatch is returned when a query matched nothing, so the caller can set
@@ -65,7 +80,15 @@ func Run(ctx context.Context, req Request, w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if isEdit(req.Command) {
+		return runEdit(ctx, req, ids, w)
+	}
 	paths := req.Paths
+	if m := pathLineRe.FindStringSubmatch(req.Arg); req.Command == CmdGet && m != nil && len(paths) == 0 {
+		if info, err := os.Stat(m[1]); err == nil && info.Mode().IsRegular() {
+			paths = []string{m[1]} // get path:line reads just that file
+		}
+	}
 	if req.Command == CmdOutline {
 		info, err := os.Stat(req.Arg)
 		if err != nil {
