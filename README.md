@@ -18,7 +18,7 @@ The `#3a5aa99132bf` after each location is the block's hash: the first 12 hex
 digits of the SHA-256 of the block's lines (joined by `\n`), so it changes only
 when the block's text changes, not when lines move or line endings differ. It
 covers the whole block even when the output is cut or replaced by an outline.
-Edit commands will accept it as `--expect` to refuse writing over a block that
+Edit commands accept it as `--expect` to refuse writing over a block that
 changed since it was read.
 
 ## Install
@@ -38,6 +38,7 @@ mdnav refs <id> [paths...] [--include-def] [--full] [--limit N] [--json]
 mdnav status <id> [paths...] [--full] [--limit N] [--json]
 mdnav ids [paths...] [--pattern NAME] [--limit N] [--json]
 mdnav version [--json]
+mdnav sub | set | replace | insert | delete | add-row | apply   (see Editing)
 ```
 
 Paths default to the current directory, searched recursively for `*.md`,
@@ -45,7 +46,8 @@ skipping `.git` and (inside a git work tree) git-ignored paths. Flags may come
 before or after arguments; `--` ends flags. Every command also takes
 `--config FILE` and `--timeout D` (default 30s).
 
-Exit status: 0 on success, 1 when nothing matched, 2 on usage errors or failure.
+Exit status: 0 on success, 1 when nothing matched, 2 on usage errors or failure,
+3 when an edit's `--expect` or `--old` no longer matches the file.
 
 ### get
 
@@ -97,6 +99,63 @@ the same line, or `active (no supersession text found)`.
 Every identifier found, with defining locations, mention count and file
 count, sorted by pattern and then naturally (D2 before D10).
 
+## Editing
+
+Edits address one block exactly like `get` (id, § number, heading text, free
+text) or as `path:line`; a heading line addresses its whole section. A target
+that matches more than one block is refused and the candidates are listed.
+Edits write the file unless `--dry-run`, print a `-`/`+` diff and the block's
+new `#hash`, and exit 3 when `--expect` or `--old` no longer matches.
+
+```
+mdnav sub <target> <old> <new> [paths...] [--expect H]
+mdnav set <target> <value> --col HEADER [--old V] [--expect H] [paths...]
+mdnav replace <target> --from FILE|- (--expect H | --force) [paths...]
+mdnav insert (--before|--after) <target> --from FILE|- [--expect H] [paths...]
+mdnav delete <target> (--expect H | --force) [paths...]
+mdnav add-row <target> --cells 'a|b|c' [--expect H] [paths...]
+mdnav apply EDITS.json|-
+```
+
+- `sub` is the in-place edit: `<old>` must occur exactly once in the block,
+  otherwise nothing changes. It may span lines.
+- `set` changes one table cell, chosen by its column header, and keeps the
+  cell's padding; a `|` in the value is escaped. With `--old` it fails unless
+  the cell still holds that value.
+- `replace` and `delete` overwrite a whole block, so they need the block's
+  `--expect <hash>` from `get` or an explicit `--force`. A deleted block that
+  sat between two blank lines takes one of them along.
+- `insert` adds lines before or after a block, as given (start with an empty
+  line to begin a new paragraph). After a section they go after its last
+  line, before the blank line that precedes the next heading. Next to a table
+  row they must be rows of that table.
+- `add-row` appends a row to the table the target is in (a row of it, or a
+  section holding exactly one table); the cell count must match the header.
+- `apply` reads `{"file": "...", "edits": [...]}`, where each edit is
+  `{"op": "sub", "target": "D4", "old": "...", "new": "...", "expect": "..."}`
+  (ops: `sub`, `set`, `replace`, `insert-before`, `insert-after`, `delete`,
+  `add-row`; fields `column`, `value`, `lines`, `cells`, `force`; unknown
+  fields are rejected). It applies them in order under one lock and writes
+  once or not at all.
+
+The file is locked, read again and the block found again before anything is
+written. The new contents go to a temporary file in the same directory, which
+is synced and renamed over the original, so readers never see half a file and
+two mdnav edits never lose each other's changes. Bytes outside the block stay
+exactly as they were, including CRLF line endings, a missing final newline and
+the file mode. Symbolic links are refused, and so are edits that would leave a
+table row with the wrong number of cells or a code fence unclosed. An editor
+that takes no lock can still race in the moment between the re-read and the
+rename.
+
+```
+$ mdnav sub D4 'per lane' 'per host' internal/nav/testdata
+// internal/nav/testdata/01-register.md:10 (§ 01. Register > table row D4) #1a5f4e8e838f  [sub of #3a5aa99132bf]
+-| D4 | Limits apply per lane. | Owner |
++| D4 | Limits apply per host. | Owner |
+// written
+```
+
 ## Identifier patterns
 
 Built in: `D\d+`, `V\d+`, `FR\d+`, `NFR\d+`, `GF-\d+`, `FP-[A-Z]+-\d+`,
@@ -139,6 +198,13 @@ CGO_ENABLED=0 go build ./cmd/mdnav
 make verify          # fmt, test, vet, staticcheck, govulncheck, mod tidy
 ```
 
+Layout: `cmd/mdnav` parses flags; `internal/markdown` parses documents,
+`internal/idpat` matches ids, `internal/config` loads `.mdnav.json`,
+`internal/source` finds and reads files, `internal/nav` answers queries and
+resolves edit targets, `internal/edit` applies edits, `internal/fileio` locks
+and atomically rewrites files, `internal/render` prints text or JSON, and
+`internal/app` wires them together.
+
 ## Release
 
 1. Set `internal/buildinfo.Version` and add a `## vX.Y.Z — YYYY-MM-DD`
@@ -151,11 +217,6 @@ publishes the GitHub release with GoReleaser
 (darwin and linux, amd64 and arm64), and pushes the cask to
 `ozgurcd/homebrew-tap` as `Casks/mdnav.rb`. It needs the repository secret
 `HOMEBREW_TAP_GITHUB_TOKEN` with push access to the tap.
-
-Layout: `cmd/mdnav` parses flags; `internal/markdown` parses documents,
-`internal/idpat` matches ids, `internal/config` loads `.mdnav.json`,
-`internal/source` finds and reads files, `internal/nav` answers queries,
-`internal/render` prints text or JSON, `internal/app` wires them together.
 
 ## Licence
 
