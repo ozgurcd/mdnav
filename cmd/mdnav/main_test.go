@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -84,5 +86,70 @@ func TestRunExitCodes(t *testing.T) {
 	}
 	if code := run([]string{"get"}, &out, &errb); code != 2 {
 		t.Fatalf("usage error should exit 2, got %d", code)
+	}
+}
+
+func TestParseEditCommands(t *testing.T) {
+	req, _, err := parse([]string{"sub", "D4", "per lane", "per host", "docs", "--expect", "#abc", "--dry-run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := req.Edit; e.Op != "sub" || e.Target != "D4" || *e.Old != "per lane" || e.New != "per host" || e.Expect != "#abc" ||
+		!req.DryRun || !slices.Equal(req.Paths, []string{"docs"}) {
+		t.Fatalf("sub: %+v", req)
+	}
+	req, _, err = parse([]string{"set", "D4", "Owner", "--col", "Source", "--old", ""})
+	if err != nil || req.Edit.Op != "set" || req.Edit.Column != "Source" || req.Edit.Value != "Owner" || req.Edit.Old == nil || *req.Edit.Old != "" {
+		t.Fatalf("set: %+v %v", req.Edit, err)
+	}
+	req, _, err = parse([]string{"insert", "--after", "§5.4", "--from", "-", "docs"})
+	if err != nil || req.Edit.Op != "insert-after" || req.Edit.Target != "§5.4" || req.From != "-" {
+		t.Fatalf("insert: %+v %v", req, err)
+	}
+	req, _, err = parse([]string{"add-row", "D5", "--cells", `D6|a \| b|Owner`})
+	if err != nil || !slices.Equal(req.Edit.Cells, []string{"D6", "a | b", "Owner"}) {
+		t.Fatalf("add-row: %+v %v", req.Edit, err)
+	}
+	for _, args := range [][]string{
+		{"sub", "D4", "only-old"},
+		{"set", "D4", "v"},
+		{"replace", "D4"},
+		{"insert", "--before", "a", "--after", "b", "--from", "f"},
+		{"insert", "--from", "f"},
+		{"add-row", "D4"},
+		{"delete", "D4", "--force", "--expect", "abc"},
+		{"apply"},
+		{"apply", "a.json", "b.json"},
+	} {
+		if _, _, err := parse(args); err == nil {
+			t.Errorf("parse(%q) should fail", args)
+		}
+	}
+}
+
+func TestRunEditExitCodes(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "a.md")
+	if err := os.WriteFile(p, []byte("# A\n\n| ID | Text |\n|----|------|\n| D1 | old text |\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := run([]string{"sub", "D1", "old", "new", p}, &out, &errb); code != 0 {
+		t.Fatalf("sub: %d %s", code, errb.String())
+	}
+	if b, _ := os.ReadFile(p); !strings.Contains(string(b), "| D1 | new text |") {
+		t.Fatalf("file: %s", b)
+	}
+	if !strings.Contains(out.String(), "+| D1 | new text |") || !strings.Contains(out.String(), "// written") {
+		t.Fatalf("output: %s", out.String())
+	}
+	if code := run([]string{"sub", "D1", "new", "x", p, "--expect", "000000000000"}, &out, &errb); code != 3 {
+		t.Fatalf("stale --expect should exit 3, got %d", code)
+	}
+	if code := run([]string{"delete", "D9", p, "--force"}, &out, &errb); code != 1 {
+		t.Fatalf("missing target should exit 1, got %d", code)
+	}
+	if code := run([]string{"delete", "D1", p}, &out, &errb); code != 2 {
+		t.Fatalf("delete without --expect/--force should exit 2, got %d", code)
 	}
 }
