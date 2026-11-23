@@ -16,6 +16,7 @@ const (
 	MatchSection   = "section"    // § number
 	MatchHeading   = "heading"    // heading text
 	MatchText      = "text"       // free text
+	MatchLine      = "line"       // path:line
 	MatchNone      = "none"
 )
 
@@ -54,46 +55,11 @@ type target struct {
 // free text. The first step that finds anything wins.
 func (n *Navigator) Get(ctx context.Context, q string, o Options) (GetResult, error) {
 	res := GetResult{Query: q, Match: MatchNone}
-	q = strings.TrimSpace(q)
-	if q == "" {
-		return res, fmt.Errorf("empty query")
-	}
-	var targets []target
-	var err error
-	if !o.Regex {
-		if _, ok := n.ids.Classify(q); ok {
-			targets, res.SeeAlso, err = n.byID(ctx, q)
-			res.Match = MatchID
-			if err == nil && len(targets) == 0 {
-				targets, err = n.byText(ctx, n.idLineMatcher(q), true)
-				res.Match = MatchIDMention
-			}
-		}
-		if err == nil && len(targets) == 0 {
-			if num, ok := markdown.ParseSectionQuery(q); ok {
-				targets, err = n.bySection(ctx, num)
-				res.Match = MatchSection
-			}
-		}
-		if err == nil && len(targets) == 0 {
-			targets, err = n.byHeading(ctx, q)
-			res.Match = MatchHeading
-		}
-	}
-	if err == nil && len(targets) == 0 {
-		var match func(string) bool
-		match, err = textMatcher(q, o.Regex)
-		if err == nil {
-			targets, err = n.byText(ctx, match, false)
-			res.Match = MatchText
-		}
-	}
+	targets, match, seeAlso, err := n.find(ctx, q, o)
 	if err != nil {
 		return res, err
 	}
-	if len(targets) == 0 {
-		res.Match = MatchNone
-	}
+	res.Match, res.SeeAlso = match, seeAlso
 	if lim := o.limit(DefaultGetLimit); lim >= 0 && len(targets) > lim {
 		res.More = len(targets) - lim
 		targets = targets[:lim]
@@ -103,6 +69,56 @@ func (n *Navigator) Get(ctx context.Context, q string, o Options) (GetResult, er
 		res.Blocks = append(res.Blocks, n.render(t, o.maxLines()))
 	}
 	return res, nil
+}
+
+// find runs the get resolution order and returns the matching targets in
+// file order, how they matched, and see-also pointers for an id.
+func (n *Navigator) find(ctx context.Context, q string, o Options) (targets []target, match string, seeAlso []Ref, err error) {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return nil, MatchNone, nil, fmt.Errorf("empty query")
+	}
+	if t, ok, err := n.lineTarget(q); ok || err != nil {
+		if err != nil {
+			return nil, MatchNone, nil, err
+		}
+		return []target{t}, MatchLine, nil, nil
+	}
+	if !o.Regex {
+		if _, ok := n.ids.Classify(q); ok {
+			targets, seeAlso, err = n.byID(ctx, q)
+			match = MatchID
+			if err == nil && len(targets) == 0 {
+				targets, err = n.byText(ctx, n.idLineMatcher(q), true)
+				match = MatchIDMention
+			}
+		}
+		if err == nil && len(targets) == 0 {
+			if num, ok := markdown.ParseSectionQuery(q); ok {
+				targets, err = n.bySection(ctx, num)
+				match = MatchSection
+			}
+		}
+		if err == nil && len(targets) == 0 {
+			targets, err = n.byHeading(ctx, q)
+			match = MatchHeading
+		}
+	}
+	if err == nil && len(targets) == 0 {
+		var m func(string) bool
+		m, err = textMatcher(q, o.Regex)
+		if err == nil {
+			targets, err = n.byText(ctx, m, false)
+			match = MatchText
+		}
+	}
+	if err != nil {
+		return nil, MatchNone, nil, err
+	}
+	if len(targets) == 0 {
+		match = MatchNone
+	}
+	return targets, match, seeAlso, nil
 }
 
 func textMatcher(q string, isRegex bool) (func(string) bool, error) {
