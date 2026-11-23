@@ -82,9 +82,10 @@ type Doc struct {
 	Tables   []Table
 	Blocks   []Block // sorted by Start, outer blocks before inner ones
 
-	code     []bool      // code[i]: line i+1 is inside a fenced code block (fences included)
-	fences   map[int]int // opening fence index -> closing fence index (0-based)
-	smallest []int       // smallest[i]: index of the smallest block containing line i+1, or -1
+	code      []bool      // code[i]: line i+1 is inside a fenced code block (fences included)
+	fences    map[int]int // opening fence index -> closing fence index (0-based)
+	openFence bool        // the last fenced code block has no closing fence
+	smallest  []int       // smallest[i]: index of the smallest block containing line i+1, or -1
 }
 
 // NumLines returns the number of lines in the document.
@@ -188,12 +189,14 @@ func (d *Doc) parseFences(owned []bool) {
 		}
 		char, size := m[2][0], len(m[2])
 		end := len(d.Lines) - 1 // an unclosed fence runs to the end of the file
+		closed := false
 		for j := i + 1; j < len(d.Lines); j++ {
 			if isClosingFence(d.Lines[j], char, size) {
-				end = j
+				end, closed = j, true
 				break
 			}
 		}
+		d.openFence = !closed
 		for k := i; k <= end; k++ {
 			d.code[k] = true
 			owned[k] = true
@@ -533,4 +536,40 @@ func indentWidth(line string) int {
 		}
 	}
 	return w
+}
+
+// OpenFence reports whether the document ends inside a fenced code block
+// whose closing fence is missing.
+func (d *Doc) OpenFence() bool { return d.openFence }
+
+// CellSpans returns the byte range [start, end) of each cell's raw text in a
+// table row, between its pipes and with surrounding whitespace included. It
+// splits exactly as SplitCells does: an escaped pipe (\|) stays in its cell
+// and the optional leading and trailing pipes delimit no cell.
+func CellSpans(line string) [][2]int {
+	start, end := 0, len(line)
+	for start < end && (line[start] == ' ' || line[start] == '\t') {
+		start++
+	}
+	for end > start && (line[end-1] == ' ' || line[end-1] == '\t') {
+		end--
+	}
+	if start < end && line[start] == '|' {
+		start++
+	}
+	if end > start && line[end-1] == '|' && !(end-2 >= start && line[end-2] == '\\') {
+		end--
+	}
+	var spans [][2]int
+	cur := start
+	for i := start; i < end; i++ {
+		switch {
+		case line[i] == '\\' && i+1 < end && line[i+1] == '|':
+			i++
+		case line[i] == '|':
+			spans = append(spans, [2]int{cur, i})
+			cur = i + 1
+		}
+	}
+	return append(spans, [2]int{cur, end})
 }

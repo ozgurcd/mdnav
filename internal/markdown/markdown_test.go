@@ -221,3 +221,35 @@ func TestStrikeSpans(t *testing.T) {
 		t.Fatalf("spans: %v", got)
 	}
 }
+
+func TestCellSpansMatchSplitCells(t *testing.T) {
+	for _, line := range []string{
+		"| D4 | Limits apply per lane. | Owner |",
+		"|a|b|",
+		"  | x \\| y |  z  |",
+		"a | b | c",
+		"| only |",
+		"| trailing escaped \\|",
+		"| | empty |",
+	} {
+		var got []string
+		for _, s := range CellSpans(line) {
+			got = append(got, strings.ReplaceAll(strings.TrimSpace(line[s[0]:s[1]]), `\|`, "|"))
+		}
+		if want := SplitCells(line); !slices.Equal(got, want) {
+			t.Errorf("CellSpans(%q) cells %q, SplitCells %q", line, got, want)
+		}
+	}
+}
+
+func TestOpenFence(t *testing.T) {
+	if parse("```\ncode\n```\n").OpenFence() {
+		t.Error("closed fence reported open")
+	}
+	if !parse("text\n```go\ncode\n").OpenFence() {
+		t.Error("unclosed fence not reported")
+	}
+	if parse("").OpenFence() {
+		t.Error("empty file reported open")
+	}
+}
