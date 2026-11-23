@@ -6,13 +6,20 @@ It is built for coding agents that read binding design documents.
 
 ```
 $ mdnav get D4 internal/nav/testdata
-// internal/nav/testdata/01-register.md:10 (§ 01. Register > table row D4)
+// internal/nav/testdata/01-register.md:10 (§ 01. Register > table row D4) #3a5aa99132bf
 | ID | Decision | Source |
 | D4 | Limits apply per lane. | Owner |
 
 // see also (headings and other table rows with this id):
-//   internal/nav/testdata/05-engine.md:15 ### Fence (D4)
+//   internal/nav/testdata/05-engine.md:15 #2dda930005e1 ### Fence (D4)
 ```
+
+The `#3a5aa99132bf` after each location is the block's hash: the first 12 hex
+digits of the SHA-256 of the block's lines (joined by `\n`), so it changes only
+when the block's text changes, not when lines move or line endings differ. It
+covers the whole block even when the output is cut or replaced by an outline.
+Edit commands will accept it as `--expect` to refuse writing over a block that
+changed since it was read.
 
 ## Install
 
@@ -72,7 +79,9 @@ directly in each section.
 Every line outside fenced code that mentions the id, grouped by file, with
 the enclosing heading path. Long lines are shown as a window around the id,
 marked with `…` (`--full` prints whole lines). Defining rows are left out and
-listed at the end unless `--include-def`.
+listed at the end unless `--include-def`. Each line carries the hash of the
+block an edit at that line would target (`359 #3a5aa99132bf: [§ …] …`); for a
+heading line that is its whole section. `status` hits carry it the same way.
 
 ### status
 
