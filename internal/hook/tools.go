@@ -1,65 +1,84 @@
 package hook
 
 import (
-	"encoding/json/v2"
 	"strings"
 )
 
-type editSpec struct {
-	OldString  string `json:"old_string"`
-	NewString  string `json:"new_string"`
-	ReplaceAll bool   `json:"replace_all"`
-}
-
-type toolInput struct {
-	FilePath string `json:"file_path"`
-	editSpec
-	Edits []editSpec `json:"edits"`
-}
-
-// decideTool judges Edit, MultiEdit and Write. It returns what the call is,
-// for the log.
-func decideTool(in Input) (decision, string) {
-	var ti toolInput
-	if json.Unmarshal(in.ToolInput, &ti) != nil || ti.FilePath == "" || !isMD(ti.FilePath) {
-		return decision{}, in.ToolName
+// decideTool judges an edit, multi_edit or write call. It returns what the
+// call is, for the log.
+func decideTool(ev Event) (decision, string) {
+	if len(ev.Paths) == 0 || !isMD(ev.Paths[0]) {
+		return decision{}, ev.Tool
 	}
-	abs := resolve(in.Cwd, ti.FilePath)
-	what := in.ToolName + " " + abs
+	abs := resolve(ev.Cwd, ev.Paths[0])
+	what := ev.Tool + " " + abs
 	if !isFile(abs) {
 		return decision{}, what // a new file, or one the tool cannot edit anyway
 	}
-	file := display(in.Cwd, abs)
+	file := display(ev.Cwd, abs)
+	if ev.Kind == KindWrite {
+		return overwrite(file, ev.Tool), what
+	}
+	cmd, ok := subCommands(ev.Cwd, file, ev.Edits)
+	if !ok {
+		cmd = mdnav("outline", nil, file)
+	}
+	return editDecision(file, ev.Tool, cmd, !ok), what
+}
+
+// decidePatch judges each file of a patch: adding over an existing
+// Markdown file or moving onto one is an overwrite, updating one is an
+// edit. Adding a new file and deleting one pass, as rm does.
+func decidePatch(ev Event) (decision, string) {
+	var best decision
+	var whats []string
+	take := func(d decision) {
+		if best.rule == "" || rank(d.rule) > rank(best.rule) {
+			best = d
+		}
+	}
+	existing := func(p string) (string, bool) {
+		abs := resolve(ev.Cwd, p)
+		whats = append(whats, abs)
+		return display(ev.Cwd, abs), isMD(p) && isFile(abs)
+	}
+	for _, o := range ev.Patch {
+		file, ok := existing(o.Path)
+		switch {
+		case o.Op == "add" && ok:
+			take(overwrite(file, ev.Tool))
+		case o.Op == "update" && ok:
+			take(editDecision(file, ev.Tool, mdnav("outline", nil, file), true))
+		}
+		if o.To != "" {
+			if to, ok := existing(o.To); ok {
+				take(overwrite(to, ev.Tool))
+			}
+		}
+	}
+	return best, ev.Tool + " " + strings.Join(whats, " ")
+}
+
+func overwrite(file, tool string) decision {
+	cmd := mdnav("outline", nil, file)
 	var b strings.Builder
-	var cmd string
-	if in.ToolName == "Write" {
-		cmd = mdnav("outline", nil, file)
-		b.WriteString("mdnav hook: " + file + " exists; change its blocks with mdnav instead of rewriting it with Write.\n")
-		b.WriteString("Run: " + cmd + "\n")
-		b.WriteString("Then replace each block that changes: mdnav replace '<block>' --from NEW.txt --expect '<hash>' " + word(file) + "\n")
-		b.WriteString(editTemplates(file))
-		b.WriteString(toolEscapeHelp)
-		return decision{rule: ruleOverwrite, reason: b.String(), command: cmd}, what
-	}
-	specs := ti.Edits
-	if in.ToolName == "Edit" {
-		specs = []editSpec{ti.editSpec}
-	}
-	pairs := make([]pair, len(specs))
-	for i, s := range specs {
-		pairs[i] = pair{Old: s.OldString, New: s.NewString, All: s.ReplaceAll}
-	}
-	cmd, ok := subCommands(in.Cwd, file, pairs)
-	if !ok {
-		cmd = mdnav("outline", nil, file)
-	}
-	b.WriteString("mdnav hook: edit " + file + " with mdnav, not " + in.ToolName + ".\n")
+	b.WriteString("mdnav hook: " + file + " exists; change its blocks with mdnav instead of rewriting it with " + tool + ".\n")
 	b.WriteString("Run: " + cmd + "\n")
-	if !ok {
+	b.WriteString("Then replace each block that changes: mdnav replace '<block>' --from NEW.txt --expect '<hash>' " + word(file) + "\n")
+	b.WriteString(editTemplates(file))
+	b.WriteString(toolEscapeHelp)
+	return decision{rule: ruleOverwrite, reason: b.String(), command: cmd}
+}
+
+func editDecision(file, tool, cmd string, templates bool) decision {
+	var b strings.Builder
+	b.WriteString("mdnav hook: edit " + file + " with mdnav, not " + tool + ".\n")
+	b.WriteString("Run: " + cmd + "\n")
+	if templates {
 		b.WriteString(editTemplates(file))
 	}
 	b.WriteString(toolEscapeHelp)
-	return decision{rule: ruleEdit, reason: b.String(), command: cmd}, what
+	return decision{rule: ruleEdit, reason: b.String(), command: cmd}
 }
 
-const toolEscapeHelp = "If mdnav cannot do this, make the change with a Bash command that carries a comment saying why: # mdnav-cannot: <specific reason>"
+const toolEscapeHelp = "If mdnav cannot do this, make the change with a shell command that carries a comment saying why: # mdnav-cannot: <specific reason>"

@@ -1,12 +1,12 @@
-// Package hook is mdnav's Claude Code PreToolUse hook: it denies Bash
-// commands that read, search or write Markdown with general tools, and Edit,
-// MultiEdit or Write calls that change an existing Markdown file, and names
-// the mdnav command that does the job. It judges only .md and .markdown paths.
+// Package hook is mdnav's PreToolUse hook for coding agents: it denies
+// shell commands that read, search or write Markdown with general tools, and
+// edit, write or patch calls that change an existing Markdown file, and
+// names the mdnav command that does the job. It judges only .md and
+// .markdown paths. A read layer per agent turns the agent's input into an
+// Event, the rules judge the Event, and a write layer per agent answers.
 package hook
 
 import (
-	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,13 +15,6 @@ import (
 
 	"github.com/ozgurcd/mdnav/internal/shell"
 )
-
-// Input is the part of the Claude Code PreToolUse payload the hook reads.
-type Input struct {
-	ToolName  string         `json:"tool_name"`
-	ToolInput jsontext.Value `json:"tool_input"`
-	Cwd       string         `json:"cwd"`
-}
 
 // Verdicts.
 const (
@@ -47,37 +40,38 @@ type decision struct {
 }
 
 // Evaluate judges one tool call. warn turns a denial into an allowed,
-// logged call.
-func Evaluate(in Input, warn bool, now time.Time) Outcome {
+// logged call. A shell or write call the read layer could not read is
+// denied in either mode.
+func Evaluate(ev Event, warn bool, now time.Time) Outcome {
 	var d decision
-	what := in.ToolName
+	what := ev.Tool
 	escape, vague := "", false
-	switch in.ToolName {
-	case "Bash":
-		var bi struct {
-			Command string `json:"command"`
-		}
-		if json.Unmarshal(in.ToolInput, &bi) != nil {
-			return Outcome{Verdict: Allow}
-		}
-		what = bi.Command
-		sc, err := shell.Parse(bi.Command)
+	if ev.Unread != "" && ev.Kind != KindRead && ev.Kind != KindOther {
+		return Outcome{Verdict: Deny, Reason: "mdnav hook: cannot read the " + ev.Agent + " " + ev.Tool +
+			" call (" + ev.Unread + "); denied so Markdown rules are not skipped. Report this to the mdnav hook owner."}
+	}
+	switch ev.Kind {
+	case KindShell:
+		what = ev.Command
+		sc, err := shell.Parse(ev.Command)
 		if err != nil {
 			return Outcome{Verdict: Allow} // bash rejects it too
 		}
 		escape, vague = escapeReason(sc.Comments)
-		b := &bash{root: in.Cwd, cwd: in.Cwd}
+		b := &bash{root: ev.Cwd, cwd: ev.Cwd}
 		b.script(sc, 0)
 		d = b.decide()
-	case "Edit", "MultiEdit", "Write":
-		d, what = decideTool(in)
+	case KindEdit, KindMultiEdit, KindWrite:
+		d, what = decideTool(ev)
+	case KindPatch:
+		d, what = decidePatch(ev)
 	default:
 		return Outcome{Verdict: Allow}
 	}
 
 	switch {
 	case escape != "":
-		return Outcome{Verdict: Escape, Command: d.command, Log: logLine(now, in.Cwd, "cannot: "+escape, what)}
+		return Outcome{Verdict: Escape, Command: d.command, Log: logLine(now, ev.Agent, ev.Cwd, "cannot: "+escape, what)}
 	case d.rule == "":
 		return Outcome{Verdict: Allow}
 	case vague:
@@ -85,7 +79,7 @@ func Evaluate(in Input, warn bool, now time.Time) Outcome {
 	}
 	if warn {
 		return Outcome{Verdict: Warn, Reason: d.reason, Command: d.command,
-			Log: logLine(now, in.Cwd, "warn "+d.rule+": "+d.command, what)}
+			Log: logLine(now, ev.Agent, ev.Cwd, "warn "+d.rule+": "+d.command, what)}
 	}
 	return Outcome{Verdict: Deny, Reason: d.reason, Command: d.command}
 }
@@ -125,9 +119,10 @@ func (b *bash) decide() decision {
 	return decision{rule: f.rule, reason: msg, command: cmd}
 }
 
-// logLine is one tab-separated MDNAV_CANNOT_LOG line: time, cwd, reason and
-// the command, quoted so it stays on one line.
-func logLine(now time.Time, cwd, reason, command string) string {
+// logLine is one tab-separated MDNAV_CANNOT_LOG line: time, cwd, reason,
+// the command, quoted so it stays on one line, and the agent. The agent is
+// last so readers of the earlier four columns keep working.
+func logLine(now time.Time, agent, cwd, reason, command string) string {
 	clean := func(s string) string {
 		return strings.Map(func(r rune) rune {
 			if r < ' ' || r == 0x7f {
@@ -136,7 +131,7 @@ func logLine(now time.Time, cwd, reason, command string) string {
 			return r
 		}, s)
 	}
-	return strings.Join([]string{now.UTC().Format(time.RFC3339), clean(cwd), clean(reason), strconv.Quote(command)}, "\t") + "\n"
+	return strings.Join([]string{now.UTC().Format(time.RFC3339), clean(cwd), clean(reason), strconv.Quote(command), clean(agent)}, "\t") + "\n"
 }
 
 // display returns the path a message shows for abs: relative to cwd when
