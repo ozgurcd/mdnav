@@ -2,6 +2,30 @@
 
 Release changes are recorded under their exact version, newest first.
 
+## v0.1.2 — 2026-11-26
+
+mdnav now ships an agent hook that sends coding agents to mdnav for Markdown.
+
+- New `mdnav hook`: a Claude Code PreToolUse hook. It reads the hook JSON on
+  standard input and denies Bash commands that read (`cat`, `head`, `tail`,
+  `less`, `more`, `nl`, `sed`, `awk`), search (`grep`, `rg`, `ag`,
+  `git grep`) or write (`sed -i`, `perl -i`, `tee`, `>`, `>>`, `>|`, `&>`,
+  `cp`, `mv`, `install`, `dd of=`, `truncate`) a `.md` or `.markdown` file,
+  and Edit, MultiEdit or Write calls that change an existing one. Each denial
+  names a mdnav command that works as written; Edit and `sed -i` replacements
+  become exact `mdnav sub` commands, checked with a dry run.
+- Counts, checksums, listings, `git diff`/`show`/`log`, quoted text,
+  here-document data, new files and mdnav itself pass. A command carrying
+  `# mdnav-cannot: <specific reason>` passes and is logged to
+  `MDNAV_CANNOT_LOG`. `MDNAV_HOOK_MODE=warn` (the default) allows and logs
+  what `deny` mode would deny. `mdnav hook --selftest` runs the decision
+  table.
+- An argument that starts with `-` but is not shaped like a flag (`->`,
+  `-> done`, `-1`) is taken as an argument; flag-shaped text goes after `--`,
+  and the error says so.
+- `set` on a heading or other non-row block names the row form to use: the
+  exact `"| name |"` when a row with that first cell exists.
+
 ## v0.1.1 — 2026-11-23
 
 mdnav can now change the documents it navigates, one block at a time.
