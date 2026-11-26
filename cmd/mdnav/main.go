@@ -19,6 +19,7 @@ import (
 	"github.com/ozgurcd/mdnav/internal/app"
 	"github.com/ozgurcd/mdnav/internal/buildinfo"
 	"github.com/ozgurcd/mdnav/internal/edit"
+	"github.com/ozgurcd/mdnav/internal/hook"
 	"github.com/ozgurcd/mdnav/internal/markdown"
 	"github.com/ozgurcd/mdnav/internal/nav"
 )
@@ -32,6 +33,7 @@ Usage:
   mdnav status <id> [paths...] [--full] [--limit N] [--json]
   mdnav ids [paths...] [--pattern NAME] [--limit N] [--json]
   mdnav version [--json]          (also: mdnav --version)
+  mdnav hook [--selftest]         Claude Code PreToolUse hook (mdnav hook --help)
 
 Edit (one block, addressed like get or as path:line; writes unless --dry-run):
   mdnav sub <target> <old> <new> [paths...] [--expect H]       replace the one occurrence of <old>
@@ -71,6 +73,12 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "hook" {
+		return hook.Main(args[1:], hook.Env{
+			Stdin: os.Stdin, Stdout: stdout, Stderr: stderr,
+			Getenv: os.Getenv, Now: time.Now, Run: run,
+		})
+	}
 	req, timeout, err := parse(args)
 	if errors.Is(err, flag.ErrHelp) {
 		fmt.Fprint(stdout, usage)

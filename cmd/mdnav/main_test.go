@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ozgurcd/mdnav/internal/hook"
 )
 
 func TestParseInterspersedFlags(t *testing.T) {
@@ -168,5 +170,22 @@ func TestRunEditExitCodes(t *testing.T) {
 	}
 	if code := run([]string{"delete", "D1", p}, &out, &errb); code != 2 {
 		t.Fatalf("delete without --expect/--force should exit 2, got %d", code)
+	}
+}
+
+// TestHook runs the hook's decision table: each row's verdict, and for each
+// denial the mdnav command it names, run as written in a fresh fixture.
+func TestHook(t *testing.T) {
+	for _, c := range hook.Cases {
+		t.Run(c.Name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := hook.WriteFixture(dir); err != nil {
+				t.Fatal(err)
+			}
+			t.Chdir(dir)
+			if err := hook.Check(c, dir, run); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
