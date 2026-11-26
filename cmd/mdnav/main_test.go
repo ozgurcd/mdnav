@@ -28,6 +28,23 @@ func TestParseDoubleDash(t *testing.T) {
 	if req.Arg != "--not-a-flag" || !slices.Equal(req.Paths, []string{"docs"}) {
 		t.Fatalf("got %+v", req)
 	}
+	// Text that starts with "-": not flag-shaped needs nothing, flag-shaped
+	// needs "--", and a flag's value may start with "-".
+	for _, c := range []struct {
+		args          []string
+		old, new, exp string
+	}{
+		{[]string{"sub", "D4", "->", "-> done", "--dry-run"}, "->", "-> done", ""},
+		{[]string{"sub", "--expect", "-ab", "--", "D4", "-x", "-y"}, "-x", "-y", "-ab"},
+	} {
+		req, _, err := parse(c.args)
+		if err != nil || *req.Edit.Old != c.old || req.Edit.New != c.new || req.Edit.Expect != c.exp {
+			t.Errorf("parse(%q) = %+v, %v", c.args, req.Edit, err)
+		}
+	}
+	if _, _, err := parse([]string{"sub", "D4", "-x", "-y"}); err == nil || !strings.Contains(err.Error(), "after --") {
+		t.Errorf("flag-shaped text: error %v should point to --", err)
+	}
 }
 
 func TestParseLimitZeroMeansAll(t *testing.T) {

@@ -11,6 +11,8 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -43,6 +45,10 @@ Edit (one block, addressed like get or as path:line; writes unless --dry-run):
 
 Paths default to the current directory, searched recursively for *.md files,
 skipping .git and git-ignored paths. Flags may come before or after arguments.
+"--" ends the flags: every argument after it is an argument, so text that
+looks like a flag goes there:  mdnav sub -- D4 '-x' '-y' docs
+An argument that starts with "-" but is not shaped like a flag ("->", "-1",
+"- item") needs no "--".
 
 get resolves the query in order: exact id (defining table row or heading),
 § number ("§5.4" or "5.4"), heading text, then free text. --regex skips the
@@ -191,26 +197,43 @@ func parse(args []string) (app.Request, time.Duration, error) {
 	return req, *timeout, nil
 }
 
-// parseInterspersed parses flags that may appear before, between or after
-// positional arguments. "--" ends flag parsing.
+// parseInterspersed parses flags anywhere among the arguments and returns the
+// positional ones in order. "--" ends the flags: every argument after it is
+// positional. An argument that starts with "-" but is not shaped like a flag
+// ("-", "->", "-1", "- item") is positional too, so old and new text such as
+// "-> done" needs no "--".
 func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	var pos []string
-	for {
-		if err := fs.Parse(args); err != nil {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			return append(pos, args[i+1:]...), nil
+		}
+		m := flagShape.FindStringSubmatch(a)
+		if m == nil {
+			pos = append(pos, a)
+			continue
+		}
+		n := 1 // the flag, plus its value when it takes one and has no "="
+		if f := fs.Lookup(m[1]); f != nil && !strings.Contains(a, "=") {
+			if b, ok := f.Value.(interface{ IsBoolFlag() bool }); !ok || !b.IsBoolFlag() {
+				n = 2
+			}
+		}
+		end := min(i+n, len(args))
+		if err := fs.Parse(args[i:end]); err != nil {
+			if fs.Lookup(m[1]) == nil && m[1] != "h" && m[1] != "help" {
+				return nil, fmt.Errorf("%w (an argument that starts with - goes after --)", err)
+			}
 			return nil, err
 		}
-		rest := fs.Args()
-		if len(rest) == 0 {
-			return pos, nil
-		}
-		// flag stops at "--" (consumed) or at the first non-flag argument.
-		if consumed := len(args) - len(rest); consumed > 0 && args[consumed-1] == "--" {
-			return append(pos, rest...), nil
-		}
-		pos = append(pos, rest[0])
-		args = rest[1:]
+		i = end - 1
 	}
+	return pos, nil
 }
+
+// flagShape matches -name, --name and --name=value, capturing the name.
+var flagShape = regexp.MustCompile(`^--?([A-Za-z][A-Za-z0-9_-]*)(?:=.*)?$`)
 
 func isSet(fs *flag.FlagSet, name string) bool {
 	set := false

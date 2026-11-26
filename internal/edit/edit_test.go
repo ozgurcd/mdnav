@@ -145,6 +145,18 @@ func TestSetCell(t *testing.T) {
 			t.Errorf("%+v: error %v, want %v", c.op, err, c.want)
 		}
 	}
+	// A bare name that resolves to a heading is refused, naming the row form;
+	// the row form then works.
+	p, m = setup(t, "# Doc\n\n## Alpha\n\n| Name | Value |\n| --- | --- |\n| Alpha | one |\n")
+	for target, form := range map[string]string{"Alpha": `"| Alpha |"`, "Doc": `"| <col1> | <col2>"`} {
+		_, err := apply(t, p, m, Op{Op: OpSet, Target: target, Column: "Value", Value: "two"})
+		if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), form) {
+			t.Errorf("set %s: error %v, want ErrInvalid naming %s", target, err, form)
+		}
+	}
+	if _, err := apply(t, p, m, Op{Op: OpSet, Target: "| Alpha |", Column: "Value", Value: "two"}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestReplaceAndDeleteNeedExpectOrForce(t *testing.T) {

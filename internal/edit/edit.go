@@ -217,9 +217,24 @@ func substitute(doc *markdown.Doc, t nav.Target, op Op) ([]string, error) {
 }
 
 // setCell changes one cell of a table row, keeping the cell's padding.
+// rowForm names the row form of a set target: the row whose first cell is the
+// target when there is one, else the generic form.
+func rowForm(doc *markdown.Doc, target string) string {
+	want := strings.TrimSpace(target)
+	for _, tb := range doc.Tables {
+		for n := tb.Sep + 1; n <= tb.End; n++ {
+			if cells := markdown.SplitCells(doc.Line(n)); len(cells) > 0 && strings.EqualFold(strings.TrimSpace(cells[0]), want) {
+				return fmt.Sprintf("%q", "| "+strings.TrimSpace(cells[0])+" |")
+			}
+		}
+	}
+	return `"| <col1> | <col2>"`
+}
+
 func setCell(doc *markdown.Doc, t nav.Target, op Op) ([]string, error) {
 	if t.Table < 0 || t.IsHeader || t.Start != t.End {
-		return nil, fmt.Errorf("%w: set needs a table body row; %s:%d-%d is a %s", ErrInvalid, doc.Path, t.Start, t.End, t.Kind)
+		return nil, fmt.Errorf("%w: set needs a table body row; %s:%d-%d is a %s; address the row by its leading cells, as in %s",
+			ErrInvalid, doc.Path, t.Start, t.End, t.Kind, rowForm(doc, op.Target))
 	}
 	headers := doc.Tables[t.Table].HeaderCells
 	col := -1
