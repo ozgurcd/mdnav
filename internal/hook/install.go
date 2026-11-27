@@ -13,12 +13,6 @@ import (
 	"strings"
 )
 
-// OpencodePlugin is the guard plugin opencode loads; the mdnav call goes in it.
-const OpencodePlugin = "/Users/odemir/Development/identuum/wiki/tools/opencode/identuum-guard.js"
-
-// opencodePlugin is OpencodePlugin, replaced in tests.
-var opencodePlugin = OpencodePlugin
-
 // guard is one hook command in a tool group.
 type guard struct {
 	Name    string // mdnav
@@ -67,10 +61,8 @@ func groups(agent string, getenv func(string) string) ([]group, error) {
 	case AgentAgy:
 		return []group{{"shell", "run_command", shell}, {"edit", "write_to_file|replace_file_content|multi_replace_file_content", []guard{m}}}, nil
 	case AgentOpencode:
-		return []group{
-			{"shell", "bash", []guard{{"mdnav", strings.TrimSpace(opencodeShellCall)}}},
-			{"edit", "edit|write|multiedit|apply_patch|patch", []guard{{"mdnav", strings.TrimSpace(opencodeEditCall)}}},
-		}, nil
+		plugin := guard{"mdnav", "the mdnav-guard plugin --print-install prints"}
+		return []group{{"shell", "shell|bash", []guard{plugin}}, {"edit", "edit|write|multiedit|patch|apply_patch", []guard{plugin}}}, nil
 	}
 	return nil, fmt.Errorf("no registration for agent %q", agent)
 }
@@ -94,7 +86,7 @@ func configPath(agent string, getenv func(string) string) string {
 		if d == "" {
 			d = filepath.Join(h, ".config")
 		}
-		return filepath.Join(d, "opencode", "plugins", "identuum-guard.js")
+		return filepath.Join(d, "opencode", "plugins", "mdnav-guard.js")
 	case AgentAgy:
 		return filepath.Join(h, ".gemini", "config", "hooks.json")
 	}
@@ -104,6 +96,11 @@ func configPath(agent string, getenv func(string) string) string {
 // PrintInstall prints agent's complete mdnav registration and returns the
 // exit status: 0, or 2 for an agent that is not measured.
 func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
+	if agent == AgentOpencode {
+		// The whole output is the plugin file, so it can be redirected into place.
+		fmt.Fprint(w, opencodePlugin(getenv))
+		return 0
+	}
 	fmt.Fprintf(w, "# mdnav hook --print-install --agent %s\n", agent)
 	record := "mdnav hook --agent " + agent + " --record " + filepath.Join(stateDir(getenv), "record")
 	gs, err := groups(agent, getenv)
@@ -144,28 +141,6 @@ func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 		fmt.Fprint(w, "{\n  \"mdnav\": {\n    \"PreToolUse\": [\n")
 		printGroups(w, gs, "      ")
 		fmt.Fprint(w, "    ]\n  }\n}\n")
-	case AgentOpencode:
-		wiki, diffs, err := pluginDiffs(opencodePlugin)
-		fmt.Fprintf(w, "# opencode runs no command hooks: the identuum-guard plugin calls mdnav.\n# Plugin: %s\n", opencodePlugin)
-		if err != nil {
-			fmt.Fprintf(w, "# cannot build the diff: %v\n", err)
-			return 1
-		}
-		if diffs == "" {
-			fmt.Fprint(w, "# The plugin and its test already have this change.\n")
-			return 0
-		}
-		fmt.Fprint(w, "# The diff makes the plugin call mdnav once per tool call with opencode's own\n"+
-			"# tool name and args (--agent opencode), and updates its tests to match.\n")
-		if unbacked {
-			fmt.Fprint(w, "# mdnav refuses --agent opencode until it has fixtures, so the plugin passes\n"+
-				"# --record ~/.config/opencode/mdnav-record meanwhile: each call is recorded and\n"+
-				"# allowed. Those recordings become opencode's fixtures.\n")
-		}
-		fmt.Fprintf(w, "#\n# 1. Apply:   mdnav hook --print-install --agent opencode | git -C %s apply\n", wiki)
-		fmt.Fprintf(w, "# 2. Test:    (cd %s && node --test identuum-guard.test.mjs)\n", filepath.Dir(opencodePlugin))
-		fmt.Fprintf(w, "# 3. Install: cp %s %s\n", opencodePlugin, configPath(agent, getenv))
-		fmt.Fprint(w, diffs)
 	}
 	return 0
 }
@@ -259,15 +234,13 @@ func status(g group, gd guard, entries []entry) string {
 	return Missing
 }
 
-// pluginStatus judges one mdnav call line of the installed opencode
-// plugin: registered when the line and the current MDNAV_ARGV are there,
-// different when another mdnav call is.
-func pluginStatus(call, src string) string {
-	argv := opencodeArgv()
+// pluginStatus judges the installed mdnav-guard plugin: registered when it
+// is what --print-install prints now.
+func pluginStatus(src, want string) string {
 	switch {
-	case strings.Contains(src, call) && strings.Contains(src, argv[len(argv)-1]):
+	case src == want:
 		return Registered
-	case strings.Contains(src, call) || strings.Contains(src, "hook('mdnav'"):
+	case src != "":
 		return Different
 	}
 	return Missing
@@ -333,7 +306,7 @@ func CheckInstall(w io.Writer, agent string, asJSON bool, getenv func(string) st
 			for _, gd := range g.Guards {
 				var st string
 				if agent == AgentOpencode {
-					st = pluginStatus(gd.Command, src)
+					st = pluginStatus(src, opencodePlugin(getenv))
 				} else {
 					st = status(g, gd, entries)
 				}
@@ -366,7 +339,7 @@ func CheckInstall(w io.Writer, agent string, asJSON bool, getenv func(string) st
 		fmt.Fprintln(w)
 	}
 	if agent == AgentOpencode {
-		fmt.Fprintln(w, "note: the plugin's text is searched for each mdnav call line")
+		fmt.Fprintln(w, "note: the plugin is compared with what --print-install prints now")
 	}
 	if agent == AgentCodex {
 		fmt.Fprintln(w, "note: whether codex trusts these hooks is not checked; start codex once interactively to trust them")

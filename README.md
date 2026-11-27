@@ -206,7 +206,9 @@ command a denial names in a scratch fixture, then replays the fixtures.
 `mdnav hook --write-fixture DIR` writes the tree to record in.
 
 `mdnav hook --print-install --agent X` prints agent X's complete mdnav
-registration, in warn mode logging to `~/.local/state/mdnav/X-mdnav-cannot.log`.
+registration, in warn mode logging to `~/.local/state/mdnav/X-mdnav-cannot.log`. opencode 2 runs no command
+hooks, so for opencode it prints `mdnav-guard.js`, a plugin to redirect into
+`~/.config/opencode/plugins/`.
 `mdnav hook --check-install --agent X [--json]` reads only X's hook
 registration and reports the mdnav guard per tool group as registered, missing
 or different (exit 0, 1; 2 when it cannot read). nuntius lanes use the owner's
