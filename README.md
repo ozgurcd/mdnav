@@ -205,7 +205,14 @@ The recordings become fixtures in `<fixtures>/<agent>/`, each with a
 command a denial names in a scratch fixture, then replays the fixtures.
 `mdnav hook --write-fixture DIR` writes the tree to record in.
 
-`mdnav hook --help` prints the registration for each agent. For Claude Code:
+`mdnav hook --print-install --agent X` prints agent X's complete guard
+registration: gograph, `achta hook cd` and mdnav, in that order, with the
+mdnav guard in warn mode logging to `~/.local/state/mdnav/X-mdnav-cannot.log`.
+`mdnav hook --check-install --agent X [--json]` reads only X's hook
+registration and reports each guard per tool group as registered, missing or
+different (exit 0, 1; 2 when it cannot read). nuntius lanes use the owner's
+agent config, so this covers them too. `mdnav hook --help` prints every
+agent's registration. For Claude Code, the mdnav part alone:
 
 ```json
 {

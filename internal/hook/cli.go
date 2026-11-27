@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -50,42 +51,20 @@ Recording (one session per agent; the recordings become fixtures):
   "<verdict> <tool_kind>", such as "deny edit". Fixture folder default:
   ` + DefaultFixtures + `
 
-Registration:
+Install pack (gograph, achta hook cd and mdnav guards, in that order):
+  mdnav hook --print-install --agent AGENT          print AGENT's complete registration
+                                                    (exit 2 for agy until it is measured)
+  mdnav hook --check-install --agent AGENT [--json] read only AGENT's hook registration and
+      report each guard per tool group: registered | missing | different from
+      --print-install. Exit 0 all registered, 1 missing or different, 2 cannot read.
+  nuntius lanes start each agent with the owner's config, so a registration
+  checked here covers that agent's lanes too.
 
-claude (~/.claude/settings.json):
-  {
-    "hooks": {
-      "PreToolUse": [
-        {"matcher": "Bash", "hooks": [{"type": "command", "command": "mdnav hook --agent claude"}]},
-        {"matcher": "Edit|Write|MultiEdit", "hooks": [{"type": "command", "command": "mdnav hook --agent claude"}]}
-      ]
-    }
-  }
+Lane proof (after install): one short lane per agent runs "cat <a .md file>"
+and one text search of a .go file. Each must be denied (deny mode) or appear
+in that agent's MDNAV_CANNOT_LOG (warn mode), the line ending in the agent.
 
-codex (~/.codex/config.toml; check the keys against the Codex hooks docs):
-  [features]
-  codex_hooks = true
-
-  [[hooks.PreToolUse]]
-  matcher = "^(Bash|apply_patch)$"
-
-  [[hooks.PreToolUse.hooks]]
-  type = "command"
-  command = "mdnav hook --agent codex"
-
-opencode (a plugin, such as identuum-guard.js, in the tool.execute.before hook):
-  "tool.execute.before": async (input, output) => {
-    const call = JSON.stringify({tool: input.tool, args: output.args, cwd: directory, sessionID: input.sessionID})
-    const r = await $` + "`" + `mdnav hook --agent opencode < ${new Response(call)}` + "`" + `.nothrow().quiet()
-    if (r.exitCode !== 0) throw new Error("mdnav hook: " + r.stderr.toString())
-    const out = r.stdout.toString().trim()
-    if (out && JSON.parse(out).decision === "deny") throw new Error(JSON.parse(out).reason)
-  }
-  It reads {tool, args, cwd, sessionID}; a denial prints {"decision":"deny","reason":...}.
-
-agy (hooks.json; the format is not measured yet, so record first):
-  {"hooks": {"PreToolUse": [{"command": "mdnav hook --agent agy --record DIR"}]}}
-  Without --record, --agent agy exits 2 until its fixtures exist.
+The registration --print-install gives each agent follows.
 `
 
 // Env is what Main needs from the process.
@@ -112,7 +91,15 @@ func Main(args []string, env Env) int {
 	switch {
 	case o.help:
 		fmt.Fprint(env.Stdout, Usage)
+		for _, agent := range Agents {
+			fmt.Fprintln(env.Stdout)
+			PrintInstall(env.Stdout, agent, env.Getenv)
+		}
 		return 0
+	case o.printInstall:
+		return PrintInstall(env.Stdout, o.agent, env.Getenv)
+	case o.checkInstall:
+		return CheckInstall(env.Stdout, o.agent, o.json, env.Getenv)
 	case o.selftest:
 		if err := SelfTest(env.Stdout, env.Run, o.fixtures); err != nil {
 			fmt.Fprintf(env.Stderr, "mdnav: %v\n", err)
@@ -177,7 +164,8 @@ func Main(args []string, env Env) int {
 
 type options struct {
 	agent, record, fixtures, writeFixture string
-	help, selftest                        bool
+	help, selftest, printInstall          bool
+	checkInstall, json                    bool
 }
 
 // parseArgs reads the flags of mdnav hook, as --flag value or --flag=value.
@@ -201,6 +189,12 @@ func parseArgs(args []string) (options, error) {
 			o.help = true
 		case "--selftest":
 			o.selftest = true
+		case "--print-install":
+			o.printInstall = true
+		case "--check-install":
+			o.checkInstall = true
+		case "--json":
+			o.json = true
 		case "--agent":
 			o.agent, err = value()
 		case "--record":
@@ -216,6 +210,9 @@ func parseArgs(args []string) (options, error) {
 			return o, err
 		}
 	}
+	if o.json && !o.checkInstall {
+		return o, errors.New("--json goes with --check-install")
+	}
 	if !slices.Contains(Agents, o.agent) {
 		return o, fmt.Errorf("unknown agent %q: use one of %s", o.agent, strings.Join(Agents, ", "))
 	}
@@ -224,7 +221,11 @@ func parseArgs(args []string) (options, error) {
 
 // appendLine appends one line with a single write: O_APPEND keeps lines
 // from hooks that run at the same time whole.
+// A missing directory is made, 0700.
 func appendLine(path, line string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
 	if err != nil {
 		return err

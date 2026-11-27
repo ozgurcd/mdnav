@@ -233,3 +233,39 @@ func TestRecordRedacts(t *testing.T) {
 		})
 	}
 }
+
+// TestInstallFlags runs --print-install, --check-install and a warn-mode
+// log into a directory that does not exist yet through Main.
+func TestInstallFlags(t *testing.T) {
+	home := t.TempDir()
+	log := filepath.Join(home, ".local", "state", "mdnav", "claude-mdnav-cannot.log")
+	vars := map[string]string{"HOME": home, "MDNAV_CANNOT_LOG": log}
+	WriteFixture(home)
+	t.Chdir(home)
+	rows := []struct {
+		name  string
+		args  []string
+		stdin string
+		code  int
+		out   string
+	}{
+		{"print claude", []string{"--print-install"}, "", 0, `"matcher": "Bash"`},
+		{"print agy", []string{"--print-install", "--agent", "agy"}, "", 2, "agy is not measured"},
+		{"check codex json", []string{"--check-install", "--agent", "codex", "--json"}, "", 1, `"agent":"codex"`},
+		{"json alone", []string{"--json"}, "", 2, ""},
+		{"warn log in a new dir", nil, `{"tool_name":"Bash","tool_input":{"command":"cat README.md"},"cwd":` + quote(home) + `}`, 0, ""},
+	}
+	for _, r := range rows {
+		t.Run(r.name, func(t *testing.T) {
+			var out, errb bytes.Buffer
+			code := Main(r.args, Env{Stdin: strings.NewReader(r.stdin), Stdout: &out, Stderr: &errb,
+				Getenv: func(k string) string { return vars[k] }, Now: func() time.Time { return time.Unix(0, 0) }})
+			if code != r.code || !strings.Contains(out.String(), r.out) {
+				t.Fatalf("exit %d, want %d; stdout %q stderr %q", code, r.code, out.String(), errb.String())
+			}
+		})
+	}
+	if b, err := os.ReadFile(log); err != nil || !strings.HasSuffix(string(b), "\tclaude\n") {
+		t.Fatalf("log %q: %v", b, err)
+	}
+}
