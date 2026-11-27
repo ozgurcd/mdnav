@@ -1,0 +1,19 @@
+{
+	"conversationId": "2a027e94-8d1c-4371-b9a6-b80d36f0b325",
+	"cwd": "/tmp/mdnav-fx",
+	"hookEventName": "PreToolUse",
+	"modelName": "gemini-4-neon-medium",
+	"stepIdx": 12,
+	"toolCall": {
+		"args": {
+			"CommandLine": "go version",
+			"WaitMsBeforeAsync": 5000,
+			"toolSummary": "Check Go version"
+		},
+		"id": "call_8292591751891271637",
+		"name": "run_command"
+	},
+	"workspacePaths": [
+		"/tmp/mdnav-fx"
+	]
+}

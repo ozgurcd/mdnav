@@ -69,10 +69,6 @@ command = "` + mdnavFor("codex") + `"
 		{AgentOpencode, 0, goldenOpencode},
 		{AgentAgy, 0, `# mdnav hook --print-install --agent agy
 # File: /h/.gemini/config/hooks.json (merge the "mdnav" entry; keep the others)
-# mdnav refuses --agent agy (exit 2) until agy has fixtures, and the docs do not
-# say what agy does on a non-zero exit; until then use
-#   mdnav hook --agent agy --record /h/.local/state/mdnav/record
-# as the mdnav command.
 {
   "mdnav": {
     "PreToolUse": [
@@ -83,7 +79,7 @@ command = "` + mdnavFor("codex") + `"
         ]
       },
       {
-        "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+        "matcher": "edit_file|write_file|write_to_file|replace_file_content|multi_replace_file_content",
         "hooks": [
           {"type": "command", "command": "` + mdnavFor("agy") + `"}
         ]
@@ -159,7 +155,7 @@ func TestCheckInstall(t *testing.T) {
 		{"codex hooks.json", AgentCodex, map[string]string{".codex/hooks.json": `{"hooks":{"PreToolUse":[{"matcher":"^Bash$","hooks":[{"type":"command","command":` + quote(mdnavFor("codex")) + `}]},{"matcher":"^apply_patch$","hooks":[{"type":"command","command":` + quote(mdnavFor("codex")) + `}]}]}}`}, 0,
 			[]string{"config.toml + " + home + "/.codex/hooks.json", "shell  mdnav    registered", "edit   mdnav    registered"}},
 		{"codex hooks.json unreadable", AgentCodex, map[string]string{".codex/hooks.json": `{`}, 2, []string{"cannot read"}},
-		{"agy registered", AgentAgy, map[string]string{".gemini/config/hooks.json": `{"$schema":"x","other":{"PreToolUse":[]},"mdnav":{"PreToolUse":[{"matcher":"run_command","hooks":[{"command":` + quote(mdnavFor("agy")) + `}]},{"matcher":"write_to_file|replace_file_content|multi_replace_file_content","hooks":[{"command":` + quote(mdnavFor("agy")) + `}]}]}}`}, 0,
+		{"agy registered", AgentAgy, map[string]string{".gemini/config/hooks.json": `{"$schema":"x","other":{"PreToolUse":[]},"mdnav":{"PreToolUse":[{"matcher":"run_command","hooks":[{"command":` + quote(mdnavFor("agy")) + `}]},{"matcher":"edit_file|write_file|write_to_file|replace_file_content|multi_replace_file_content","hooks":[{"command":` + quote(mdnavFor("agy")) + `}]}]}}`}, 0,
 			[]string{"shell  mdnav    registered", "edit   mdnav    registered"}},
 		{"agy disabled", AgentAgy, map[string]string{".gemini/config/hooks.json": `{"mdnav":{"enabled":false,"PreToolUse":[{"matcher":"run_command","hooks":[{"command":` + quote(mdnavFor("agy")) + `}]}]}}`}, 1,
 			[]string{"shell  mdnav    missing"}},

@@ -1,0 +1,19 @@
+{
+	"conversationId": "2e1379cf-87fa-465e-9b01-0846015eae6f",
+	"cwd": "/tmp/mdnav-fx",
+	"hookEventName": "PreToolUse",
+	"modelName": "gemini-4-neon-medium",
+	"stepIdx": 3,
+	"toolCall": {
+		"args": {
+			"Path": "/tmp/mdnav-fx/main.go",
+			"Replacement": "// test\npackage main",
+			"Target": "package main"
+		},
+		"id": "call_1610648932855154285",
+		"name": "edit_file"
+	},
+	"workspacePaths": [
+		"/tmp/mdnav-fx"
+	]
+}

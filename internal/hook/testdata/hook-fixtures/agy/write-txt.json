@@ -1,0 +1,18 @@
+{
+	"conversationId": "2e1379cf-87fa-465e-9b01-0846015eae6f",
+	"cwd": "/tmp/mdnav-fx",
+	"hookEventName": "PreToolUse",
+	"modelName": "gemini-4-neon-medium",
+	"stepIdx": 5,
+	"toolCall": {
+		"args": {
+			"Content": "hi",
+			"Path": "/tmp/mdnav-fx/scratch.txt"
+		},
+		"id": "call_1610648932855155063",
+		"name": "write_file"
+	},
+	"workspacePaths": [
+		"/tmp/mdnav-fx"
+	]
+}

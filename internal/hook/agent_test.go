@@ -159,7 +159,7 @@ func TestMainCLI(t *testing.T) {
 		{"default claude", nil, bash, 0, ""},
 		{"codex judged", []string{"--agent=codex"}, bash, 0, ""},
 		{"opencode judged", []string{"--agent", "opencode"}, `{"tool":"shell","args":{"command":"ls"},"cwd":"/w"}`, 0, ""},
-		{"agy refused", []string{"--agent", "agy"}, `{}`, 2, "no fixture-backed format for agy"},
+		{"agy judged", []string{"--agent", "agy"}, `{"toolCall":{"name":"run_command","args":{"CommandLine":"ls"}},"workspacePaths":["/w"]}`, 0, ""},
 		{"agy records", []string{"--agent", "agy", "--record", rec}, `{"toolCall":{"id":"1","content":"` + long + `"},"cwd":"/w"}`, 0, ""},
 		{"record dir open to others", []string{"--record", open}, bash, 1, "open to other users"},
 		{"bad input", nil, `{`, 1, "cannot read the hook input"},
@@ -228,8 +228,10 @@ func TestReplayFixtures(t *testing.T) {
 	if counts[AgentClaude] != 1 || counts[AgentAgy] != 0 {
 		t.Fatalf("counts %v", counts)
 	}
+	fixtureBacked[AgentAgy] = false
+	defer func() { fixtureBacked[AgentAgy] = true }()
 	if !errors.Is(func() error { _, err := Read(AgentAgy, nil); return err }(), ErrNoFixtures) {
-		t.Fatal("agy is not gated")
+		t.Fatal("an agent without fixtures is not gated")
 	}
 }
 
@@ -288,7 +290,7 @@ func TestInstallFlags(t *testing.T) {
 		out   string
 	}{
 		{"print claude", []string{"--print-install"}, "", 0, `"matcher": "Bash"`},
-		{"print agy", []string{"--print-install", "--agent", "agy"}, "", 0, "mdnav refuses --agent agy"},
+		{"print agy", []string{"--print-install", "--agent", "agy"}, "", 0, `"matcher": "edit_file|write_file|`},
 		{"check codex json", []string{"--check-install", "--agent", "codex", "--json"}, "", 1, `"agent":"codex"`},
 		{"json alone", []string{"--json"}, "", 2, ""},
 		{"warn log in a new dir", nil, `{"tool_name":"Bash","tool_input":{"command":"cat README.md"},"cwd":` + quote(home) + `}`, 0, ""},

@@ -73,7 +73,7 @@ func groups(agent string, getenv func(string) string) ([]group, error) {
 	case AgentCodex:
 		return []group{{"shell", "^Bash$", shell}, {"edit", "^apply_patch$", []guard{m}}}, nil
 	case AgentAgy:
-		return []group{{"shell", "run_command", shell}, {"edit", "write_to_file|replace_file_content|multi_replace_file_content", []guard{m}}}, nil
+		return []group{{"shell", "run_command", shell}, {"edit", "edit_file|write_file|write_to_file|replace_file_content|multi_replace_file_content", []guard{m}}}, nil
 	case AgentOpencode:
 		plugin := guard{"mdnav", "the mdnav-guard plugin --print-install prints"}
 		return []group{{"shell", "shell|bash", []guard{plugin}}, {"edit", "edit|write|multiedit|patch|apply_patch", []guard{plugin}}}, nil

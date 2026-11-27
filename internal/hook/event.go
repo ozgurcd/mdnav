@@ -23,7 +23,7 @@ var Agents = []string{AgentClaude, AgentCodex, AgentOpencode, AgentAgy}
 // fixtureBacked lists the agents whose read layer is backed by recorded
 // fixtures. Every other agent is refused until its recordings are in the
 // fixture folder and it is added here.
-var fixtureBacked = map[string]bool{AgentClaude: true, AgentCodex: true, AgentOpencode: true}
+var fixtureBacked = map[string]bool{AgentClaude: true, AgentCodex: true, AgentOpencode: true, AgentAgy: true}
 
 // Tool kinds of an Event.
 const (
@@ -347,6 +347,18 @@ func readAgy(raw []byte) (Event, error) {
 		for _, c := range chunks {
 			ev.Edits = append(ev.Edits, pair{Old: c.TargetContent, New: c.ReplacementContent, All: c.AllowMultiple})
 		}
+	case "edit_file": // the Antigravity CLI's edit tool
+		ev.Kind = KindEdit
+		var a struct {
+			Path        string `json:"Path"`
+			Target      string `json:"Target"`
+			Replacement string `json:"Replacement"`
+		}
+		if err = decode(ti, &a); err == nil {
+			err = need(a.Path != "", "Path")
+		}
+		ev.Paths = []string{a.Path}
+		ev.Edits = []pair{{Old: a.Target, New: a.Replacement}}
 	case "write_to_file":
 		ev.Kind = KindWrite
 		var a struct {
@@ -356,6 +368,15 @@ func readAgy(raw []byte) (Event, error) {
 			err = need(a.TargetFile != "", "TargetFile")
 		}
 		ev.Paths = []string{a.TargetFile}
+	case "write_file": // the Antigravity CLI's write tool
+		ev.Kind = KindWrite
+		var a struct {
+			Path string `json:"Path"`
+		}
+		if err = decode(ti, &a); err == nil {
+			err = need(a.Path != "", "Path")
+		}
+		ev.Paths = []string{a.Path}
 	case "view_file", "list_dir", "find_by_name", "grep_search", "search_web", "read_url_content",
 		"manage_task", "list_permissions", "ask_permission", "ask_question":
 		ev.Kind = KindRead

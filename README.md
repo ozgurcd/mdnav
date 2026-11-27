@@ -168,7 +168,7 @@ agent: a read layer per agent turns its input into one common event, the
 rules below judge it, and a write layer per agent answers in that agent's
 format. An unknown agent exits 2. An agent whose format has no recorded
 fixtures yet exits 2 with `no fixture-backed format for <agent>`; `claude`,
-`codex` and `opencode` are fixture-backed today. It denies, with the mdnav command to
+`codex`, `opencode` and `agy` (including the Antigravity CLI's `edit_file` and `write_file`) are fixture-backed today. It denies, with the mdnav command to
 run instead:
 
 - shell commands that read a `.md` or `.markdown` file (`cat`, `head`, `tail`,
