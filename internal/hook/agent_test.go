@@ -52,6 +52,13 @@ func TestRead(t *testing.T) {
 		{name: "opencode patch without begin", agent: AgentOpencode,
 			raw:  `{"tool":"apply_patch","args":{"patchText":"*** Update File: a.md"}}`,
 			want: Event{Agent: "opencode", Tool: "apply_patch", Kind: KindPatch, Unread: "no *** Begin Patch line"}},
+		{name: "opencode multiedit per-edit paths", agent: AgentOpencode,
+			raw: `{"tool":"multiedit","args":{"edits":[{"filePath":"a.md","oldString":"x","newString":"y"},{"filePath":"b.go","oldString":"p","newString":"q"},{"filePath":"a.md","oldString":"z","newString":"w"}]},"cwd":"/w"}`,
+			want: Event{Agent: "opencode", Tool: "multiedit", Kind: KindMultiEdit, Paths: []string{"a.md", "b.go"}, Cwd: "/w",
+				Edits: []pair{{Path: "a.md", Old: "x", New: "y"}, {Path: "b.go", Old: "p", New: "q"}, {Path: "a.md", Old: "z", New: "w"}}}},
+		{name: "opencode multiedit without paths", agent: AgentOpencode,
+			raw:  `{"tool":"multiedit","args":{"edits":[{"oldString":"x","newString":"y"}]}}`,
+			want: Event{Agent: "opencode", Tool: "multiedit", Kind: KindMultiEdit, Paths: []string{""}, Edits: []pair{{Old: "x", New: "y"}}, Unread: "no filePath"}},
 		{name: "opencode glob", agent: AgentOpencode,
 			raw:  `{"tool":"glob","args":{"pattern":"**/*.md"}}`,
 			want: Event{Agent: "opencode", Tool: "glob", Kind: KindRead}},
@@ -267,5 +274,30 @@ func TestInstallFlags(t *testing.T) {
 	}
 	if b, err := os.ReadFile(log); err != nil || !strings.HasSuffix(string(b), "\tclaude\n") {
 		t.Fatalf("log %q: %v", b, err)
+	}
+}
+
+// TestMultiEditPaths judges a multiedit across files: the Markdown file's
+// edits decide, the Go file's do not.
+func TestMultiEditPaths(t *testing.T) {
+	dir := t.TempDir()
+	WriteFixture(dir)
+	t.Chdir(dir)
+	for _, r := range []struct {
+		files []string
+		want  string
+	}{{[]string{"main.go", "README.md"}, Deny}, {[]string{"main.go", "notes.txt"}, Allow}} {
+		args := map[string]any{"edits": []map[string]any{
+			{"filePath": r.files[0], "oldString": "main", "newString": "app"},
+			{"filePath": r.files[1], "oldString": "See", "newString": "Read"},
+		}}
+		raw, _ := json.Marshal(map[string]any{"tool": "multiedit", "args": args, "cwd": dir})
+		ev, err := read(AgentOpencode, raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out := Evaluate(ev, false, time.Unix(0, 0)); out.Verdict != r.want || r.want == Deny && !strings.Contains(out.Reason, "Run: mdnav sub README.md:3 See Read") {
+			t.Fatalf("%v: verdict %s, want %s\n%s", r.files, out.Verdict, r.want, out.Reason)
+		}
 	}
 }

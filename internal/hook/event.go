@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -212,25 +213,36 @@ func readOpencode(raw []byte) (Event, error) {
 			ev.Kind = KindMultiEdit
 		}
 		type spec struct {
+			FilePath   string `json:"filePath"`
 			OldString  string `json:"oldString"`
 			NewString  string `json:"newString"`
 			ReplaceAll bool   `json:"replaceAll"`
 		}
 		var a struct {
-			FilePath string `json:"filePath"`
 			spec
 			Edits []spec `json:"edits"`
 		}
-		if err = decode(ti, &a); err == nil {
-			err = need(a.FilePath != "", "filePath")
-		}
-		ev.Paths = []string{a.FilePath}
+		err = decode(ti, &a)
 		specs := a.Edits
 		if ev.Kind == KindEdit {
 			specs = []spec{a.spec}
 		}
+		// A multiedit names one filePath for all edits, or one per edit.
 		for _, s := range specs {
-			ev.Edits = append(ev.Edits, pair{Old: s.OldString, New: s.NewString, All: s.ReplaceAll})
+			p := pair{Old: s.OldString, New: s.NewString, All: s.ReplaceAll}
+			if a.FilePath == "" && s.FilePath != "" {
+				p.Path = s.FilePath
+				if !slices.Contains(ev.Paths, s.FilePath) {
+					ev.Paths = append(ev.Paths, s.FilePath)
+				}
+			}
+			ev.Edits = append(ev.Edits, p)
+		}
+		if a.FilePath != "" || len(ev.Paths) == 0 {
+			ev.Paths = []string{a.FilePath}
+		}
+		if err == nil {
+			err = need(!slices.Contains(ev.Paths, ""), "filePath")
 		}
 	case "write":
 		ev.Kind = KindWrite

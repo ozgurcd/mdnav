@@ -7,6 +7,9 @@ import (
 // decideTool judges an edit, multi_edit or write call. It returns what the
 // call is, for the log.
 func decideTool(ev Event) (decision, string) {
+	if len(ev.Paths) > 1 {
+		return decideEach(ev)
+	}
 	if len(ev.Paths) == 0 || !isMD(ev.Paths[0]) {
 		return decision{}, ev.Tool
 	}
@@ -24,6 +27,28 @@ func decideTool(ev Event) (decision, string) {
 		cmd = mdnav("outline", nil, file)
 	}
 	return editDecision(file, ev.Tool, cmd, !ok), what
+}
+
+// decideEach judges a multi-file edit one file at a time, with that file's
+// edits, and keeps the highest rule.
+func decideEach(ev Event) (decision, string) {
+	var best decision
+	var whats []string
+	for _, p := range ev.Paths {
+		one := ev
+		one.Paths, one.Edits = []string{p}, nil
+		for _, e := range ev.Edits {
+			if e.Path == p {
+				one.Edits = append(one.Edits, e)
+			}
+		}
+		d, what := decideTool(one)
+		whats = append(whats, what)
+		if d.rule != "" && (best.rule == "" || rank(d.rule) > rank(best.rule)) {
+			best = d
+		}
+	}
+	return best, strings.Join(whats, "; ")
 }
 
 // decidePatch judges each file of a patch: adding over an existing
