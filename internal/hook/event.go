@@ -72,6 +72,8 @@ func read(agent string, raw []byte) (Event, error) {
 		return readClaude(agent, raw)
 	case AgentOpencode:
 		return readOpencode(raw)
+	case AgentAgy:
+		return readAgy(raw)
 	}
 	return Event{}, fmt.Errorf("%w for %s", ErrNoFixtures, agent)
 }
@@ -192,7 +194,7 @@ func readOpencode(raw []byte) (Event, error) {
 	ti := in.Args
 	var err error
 	switch in.Tool {
-	case "bash":
+	case "bash", "shell": // V1 bash, V2 shell
 		ev.Kind = KindShell
 		var a struct {
 			Command *string `json:"command"`
@@ -214,6 +216,7 @@ func readOpencode(raw []byte) (Event, error) {
 		}
 		type spec struct {
 			FilePath   string `json:"filePath"`
+			Path       string `json:"path"` // V2
 			OldString  string `json:"oldString"`
 			NewString  string `json:"newString"`
 			ReplaceAll bool   `json:"replaceAll"`
@@ -223,6 +226,9 @@ func readOpencode(raw []byte) (Event, error) {
 			Edits []spec `json:"edits"`
 		}
 		err = decode(ti, &a)
+		if a.FilePath == "" {
+			a.FilePath = a.Path
+		}
 		specs := a.Edits
 		if ev.Kind == KindEdit {
 			specs = []spec{a.spec}
@@ -230,6 +236,9 @@ func readOpencode(raw []byte) (Event, error) {
 		// A multiedit names one filePath for all edits, or one per edit.
 		for _, s := range specs {
 			p := pair{Old: s.OldString, New: s.NewString, All: s.ReplaceAll}
+			if s.FilePath == "" {
+				s.FilePath = s.Path
+			}
 			if a.FilePath == "" && s.FilePath != "" {
 				p.Path = s.FilePath
 				if !slices.Contains(ev.Paths, s.FilePath) {
@@ -248,11 +257,12 @@ func readOpencode(raw []byte) (Event, error) {
 		ev.Kind = KindWrite
 		var a struct {
 			FilePath string `json:"filePath"`
+			Path     string `json:"path"` // V2
 		}
 		if err = decode(ti, &a); err == nil {
-			err = need(a.FilePath != "", "filePath")
+			ev.Paths = []string{a.FilePath + a.Path}
+			err = need(ev.Paths[0] != "", "filePath")
 		}
-		ev.Paths = []string{a.FilePath}
 	case "patch", "apply_patch":
 		ev.Kind = KindPatch
 		var a struct {
@@ -262,7 +272,92 @@ func readOpencode(raw []byte) (Event, error) {
 			ev.Patch, err = parsePatch(a.PatchText)
 			ev.Paths = patchPaths(ev.Patch)
 		}
-	case "read", "glob", "grep", "list", "webfetch", "websearch", "todoread", "todowrite", "task":
+	case "read", "glob", "grep", "list", "ls", "lsp", "webfetch", "websearch", "todoread", "todowrite", "task", "question", "skill":
+		ev.Kind = KindRead
+	default:
+		ev.Kind = KindOther
+	}
+	if err != nil {
+		ev.Unread = err.Error()
+	}
+	return ev, nil
+}
+
+// readAgy reads an Antigravity PreToolUse payload: toolCall {name, args},
+// conversationId and workspacePaths, with Antigravity's tool and argument
+// names.
+func readAgy(raw []byte) (Event, error) {
+	var in struct {
+		HookEventName string `json:"hookEventName"`
+		ToolCall      struct {
+			Name string         `json:"name"`
+			Args jsontext.Value `json:"args"`
+		} `json:"toolCall"`
+		ConversationID string   `json:"conversationId"`
+		WorkspacePaths []string `json:"workspacePaths"`
+	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return Event{}, err
+	}
+	ev := Event{Agent: AgentAgy, Event: in.HookEventName, Tool: in.ToolCall.Name, Session: in.ConversationID}
+	if len(in.WorkspacePaths) > 0 {
+		ev.Cwd = in.WorkspacePaths[0]
+	}
+	ti := in.ToolCall.Args
+	var err error
+	switch in.ToolCall.Name {
+	case "run_command":
+		ev.Kind = KindShell
+		var a struct {
+			CommandLine *string `json:"CommandLine"`
+			Cwd         string  `json:"Cwd"`
+		}
+		if err = decode(ti, &a); err == nil {
+			err = need(a.CommandLine != nil, "CommandLine")
+		}
+		if a.Cwd != "" {
+			ev.Cwd = resolve(ev.Cwd, a.Cwd)
+		}
+		if err == nil {
+			ev.Command = *a.CommandLine
+		}
+	case "replace_file_content", "multi_replace_file_content":
+		ev.Kind = KindEdit
+		if in.ToolCall.Name == "multi_replace_file_content" {
+			ev.Kind = KindMultiEdit
+		}
+		type chunk struct {
+			TargetContent      string `json:"TargetContent"`
+			ReplacementContent string `json:"ReplacementContent"`
+			AllowMultiple      bool   `json:"AllowMultiple"`
+		}
+		var a struct {
+			TargetFile string `json:"TargetFile"`
+			chunk
+			ReplacementChunks []chunk `json:"ReplacementChunks"`
+		}
+		if err = decode(ti, &a); err == nil {
+			err = need(a.TargetFile != "", "TargetFile")
+		}
+		ev.Paths = []string{a.TargetFile}
+		chunks := a.ReplacementChunks
+		if ev.Kind == KindEdit {
+			chunks = []chunk{a.chunk}
+		}
+		for _, c := range chunks {
+			ev.Edits = append(ev.Edits, pair{Old: c.TargetContent, New: c.ReplacementContent, All: c.AllowMultiple})
+		}
+	case "write_to_file":
+		ev.Kind = KindWrite
+		var a struct {
+			TargetFile string `json:"TargetFile"`
+		}
+		if err = decode(ti, &a); err == nil {
+			err = need(a.TargetFile != "", "TargetFile")
+		}
+		ev.Paths = []string{a.TargetFile}
+	case "view_file", "list_dir", "find_by_name", "grep_search", "search_web", "read_url_content",
+		"manage_task", "list_permissions", "ask_permission", "ask_question":
 		ev.Kind = KindRead
 	default:
 		ev.Kind = KindOther

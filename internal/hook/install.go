@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -62,14 +63,16 @@ func groups(agent string, getenv func(string) string) ([]group, error) {
 	case AgentClaude:
 		return []group{{"shell", "Bash", shell}, {"edit", "Edit|Write|MultiEdit", []guard{m}}}, nil
 	case AgentCodex:
-		return []group{{"shell", "^Bash$", shell}}, nil
+		return []group{{"shell", "^Bash$", shell}, {"edit", "^apply_patch$", []guard{m}}}, nil
+	case AgentAgy:
+		return []group{{"shell", "run_command", shell}, {"edit", "write_to_file|replace_file_content|multi_replace_file_content", []guard{m}}}, nil
 	case AgentOpencode:
 		return []group{
 			{"shell", "bash", []guard{{"mdnav", strings.TrimSpace(opencodeShellCall)}}},
 			{"edit", "edit|write|multiedit|apply_patch|patch", []guard{{"mdnav", strings.TrimSpace(opencodeEditCall)}}},
 		}, nil
 	}
-	return nil, fmt.Errorf("%s is not measured: its hooks.json path, edit tool names and decision words come from fixtures", agent)
+	return nil, fmt.Errorf("no registration for agent %q", agent)
 }
 
 // configPath is the file agent's registration lives in.
@@ -92,6 +95,8 @@ func configPath(agent string, getenv func(string) string) string {
 			d = filepath.Join(h, ".config")
 		}
 		return filepath.Join(d, "opencode", "plugins", "identuum-guard.js")
+	case AgentAgy:
+		return filepath.Join(h, ".gemini", "config", "hooks.json")
 	}
 	return ""
 }
@@ -103,9 +108,7 @@ func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 	record := "mdnav hook --agent " + agent + " --record " + filepath.Join(stateDir(getenv), "record")
 	gs, err := groups(agent, getenv)
 	if err != nil {
-		fmt.Fprintf(w, "# agy is not measured: its hooks.json path, edit tool names and decision words\n"+
-			"# come from fixtures. Record first: register\n#   %s\n"+
-			"# as agy's PreToolUse command, run one session, and add the recordings to\n# <fixtures>/agy/.\n", record)
+		fmt.Fprintf(w, "# %v\n", err)
 		return 2
 	}
 	unbacked := !fixtureBacked[agent]
@@ -113,32 +116,34 @@ func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 	case AgentClaude:
 		fmt.Fprintf(w, "# File: %s (merge into \"hooks\"; keep every other key)\n", configPath(agent, getenv))
 		fmt.Fprint(w, "{\n  \"hooks\": {\n    \"PreToolUse\": [\n")
-		for i, g := range gs {
-			fmt.Fprintf(w, "      {\n        \"matcher\": %s,\n        \"hooks\": [\n", jsonString(g.Matcher))
-			for j, gd := range g.Guards {
-				fmt.Fprintf(w, "          {\"type\": \"command\", \"command\": %s}%s\n", jsonString(gd.Command), comma(j, len(g.Guards)))
-			}
-			fmt.Fprintf(w, "        ]\n      }%s\n", comma(i, len(gs)))
-		}
+		printGroups(w, gs, "      ")
 		fmt.Fprint(w, "    ]\n  }\n}\n")
 	case AgentCodex:
-		fmt.Fprintf(w, "# File: %s\n", configPath(agent, getenv))
-		fmt.Fprint(w, "# apply_patch: not measured whether Codex sends it to hooks, so there is no\n"+
-			"# apply_patch matcher until a fixture shows it.\n"+
-			"# Check the keys against the Codex hooks docs; they were not reachable when\n"+
-			"# this text was written.\n")
+		cfg := configPath(agent, getenv)
+		fmt.Fprintf(w, "# File: %s (or the same groups in %s; not both)\n", cfg, filepath.Join(filepath.Dir(cfg), "hooks.json"))
+		fmt.Fprint(w, "# Codex sends Bash and apply_patch to PreToolUse; apply_patch carries the patch\n"+
+			"# in tool_input.command.\n")
 		if unbacked {
-			fmt.Fprintf(w, "# mdnav refuses --agent codex (exit 2) until codex has fixtures; until then use\n#   %s\n# as the mdnav command.\n", record)
+			fmt.Fprintf(w, "# mdnav refuses --agent codex (exit 2, which blocks the call in Codex) until\n"+
+				"# codex has fixtures; until then use\n#   %s\n# as the mdnav command.\n", record)
 		}
-		fmt.Fprint(w, "[features]\ncodex_hooks = true\n")
 		for _, g := range gs {
 			fmt.Fprintf(w, "\n[[hooks.PreToolUse]]\nmatcher = %s\n", jsonString(g.Matcher))
 			for _, gd := range g.Guards {
 				fmt.Fprintf(w, "\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = %s\n", jsonString(gd.Command))
 			}
 		}
-		fmt.Fprint(w, "\n# Owner step: start codex once interactively and trust the new hooks. Lanes run\n"+
-			"# non-interactively and skip untrusted hooks.\n")
+		fmt.Fprint(w, "\n# Owner step: run /hooks in codex and trust these hooks. Codex skips new or\n"+
+			"# changed hooks until they are trusted, so lanes would skip them.\n")
+	case AgentAgy:
+		fmt.Fprintf(w, "# File: %s (merge the \"mdnav\" entry; keep the others)\n", configPath(agent, getenv))
+		if unbacked {
+			fmt.Fprintf(w, "# mdnav refuses --agent agy (exit 2) until agy has fixtures, and the docs do not\n"+
+				"# say what agy does on a non-zero exit; until then use\n#   %s\n# as the mdnav command.\n", record)
+		}
+		fmt.Fprint(w, "{\n  \"mdnav\": {\n    \"PreToolUse\": [\n")
+		printGroups(w, gs, "      ")
+		fmt.Fprint(w, "    ]\n  }\n}\n")
 	case AgentOpencode:
 		wiki, diffs, err := pluginDiffs(opencodePlugin)
 		fmt.Fprintf(w, "# opencode runs no command hooks: the identuum-guard plugin calls mdnav.\n# Plugin: %s\n", opencodePlugin)
@@ -163,6 +168,17 @@ func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 		fmt.Fprint(w, diffs)
 	}
 	return 0
+}
+
+// printGroups prints matcher groups as JSON array elements at indent.
+func printGroups(w io.Writer, gs []group, indent string) {
+	for i, g := range gs {
+		fmt.Fprintf(w, "%s{\n%s  \"matcher\": %s,\n%s  \"hooks\": [\n", indent, indent, jsonString(g.Matcher), indent)
+		for j, gd := range g.Guards {
+			fmt.Fprintf(w, "%s    {\"type\": \"command\", \"command\": %s}%s\n", indent, jsonString(gd.Command), comma(j, len(g.Guards)))
+		}
+		fmt.Fprintf(w, "%s  ]\n%s}%s\n", indent, indent, comma(i, len(gs)))
+	}
 }
 
 func comma(i, n int) string {
@@ -290,8 +306,24 @@ func CheckInstall(w io.Writer, agent string, asJSON bool, getenv func(string) st
 			entries, err = claudeEntries(raw)
 		case agent == AgentCodex:
 			entries, err = codexEntries(string(raw))
+		case agent == AgentAgy:
+			entries, err = agyEntries(raw)
 		default:
 			src = string(raw)
+		}
+	}
+	if err == nil && agent == AgentCodex {
+		// Codex loads hooks.json beside config.toml too.
+		raw, rerr := os.ReadFile(filepath.Join(filepath.Dir(report.Config), "hooks.json"))
+		switch {
+		case errors.Is(rerr, fs.ErrNotExist):
+		case rerr != nil:
+			err = rerr
+		default:
+			var more []entry
+			if more, err = claudeEntries(raw); err == nil {
+				entries = append(entries, more...)
+			}
 		}
 	}
 	if err != nil {
@@ -368,6 +400,45 @@ func claudeEntries(raw []byte) ([]entry, error) {
 			}
 		}
 		es = append(es, e)
+	}
+	return es, nil
+}
+
+// agyEntries reads only the PreToolUse groups of the enabled named hooks
+// of an Antigravity hooks.json.
+func agyEntries(raw []byte) ([]entry, error) {
+	var top map[string]jsontext.Value
+	if err := json.Unmarshal(raw, &top); err != nil {
+		return nil, err
+	}
+	type hook struct {
+		Enabled    *bool `json:"enabled"`
+		PreToolUse []struct {
+			Matcher string `json:"matcher"`
+			Hooks   []struct {
+				Type    string `json:"type"`
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"PreToolUse"`
+	}
+	var es []entry
+	for _, v := range top {
+		var h hook
+		if v.Kind() != '{' || json.Unmarshal(v, &h) != nil {
+			continue // not a named hook, such as "$schema"
+		}
+		if h.Enabled != nil && !*h.Enabled {
+			continue
+		}
+		for _, p := range h.PreToolUse {
+			e := entry{Matcher: p.Matcher}
+			for _, hd := range p.Hooks {
+				if hd.Type == "" || hd.Type == "command" {
+					e.Commands = append(e.Commands, hd.Command)
+				}
+			}
+			es = append(es, e)
+		}
 	}
 	return es, nil
 }

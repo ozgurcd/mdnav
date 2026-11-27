@@ -46,16 +46,13 @@ func TestPrintInstall(t *testing.T) {
 }
 `},
 		{AgentCodex, 0, `# mdnav hook --print-install --agent codex
-# File: /h/.codex/config.toml
-# apply_patch: not measured whether Codex sends it to hooks, so there is no
-# apply_patch matcher until a fixture shows it.
-# Check the keys against the Codex hooks docs; they were not reachable when
-# this text was written.
-# mdnav refuses --agent codex (exit 2) until codex has fixtures; until then use
+# File: /h/.codex/config.toml (or the same groups in /h/.codex/hooks.json; not both)
+# Codex sends Bash and apply_patch to PreToolUse; apply_patch carries the patch
+# in tool_input.command.
+# mdnav refuses --agent codex (exit 2, which blocks the call in Codex) until
+# codex has fixtures; until then use
 #   mdnav hook --agent codex --record /h/.local/state/mdnav/record
 # as the mdnav command.
-[features]
-codex_hooks = true
 
 [[hooks.PreToolUse]]
 matcher = "^Bash$"
@@ -64,16 +61,41 @@ matcher = "^Bash$"
 type = "command"
 command = "` + mdnavFor("codex") + `"
 
-# Owner step: start codex once interactively and trust the new hooks. Lanes run
-# non-interactively and skip untrusted hooks.
+[[hooks.PreToolUse]]
+matcher = "^apply_patch$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "` + mdnavFor("codex") + `"
+
+# Owner step: run /hooks in codex and trust these hooks. Codex skips new or
+# changed hooks until they are trusted, so lanes would skip them.
 `},
 		{AgentOpencode, 0, goldenOpencode},
-		{AgentAgy, 2, `# mdnav hook --print-install --agent agy
-# agy is not measured: its hooks.json path, edit tool names and decision words
-# come from fixtures. Record first: register
+		{AgentAgy, 0, `# mdnav hook --print-install --agent agy
+# File: /h/.gemini/config/hooks.json (merge the "mdnav" entry; keep the others)
+# mdnav refuses --agent agy (exit 2) until agy has fixtures, and the docs do not
+# say what agy does on a non-zero exit; until then use
 #   mdnav hook --agent agy --record /h/.local/state/mdnav/record
-# as agy's PreToolUse command, run one session, and add the recordings to
-# <fixtures>/agy/.
+# as the mdnav command.
+{
+  "mdnav": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {"type": "command", "command": "` + mdnavFor("agy") + `"}
+        ]
+      },
+      {
+        "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [
+          {"type": "command", "command": "` + mdnavFor("agy") + `"}
+        ]
+      }
+    ]
+  }
+}
 `},
 	}
 	for _, r := range rows {
@@ -103,9 +125,12 @@ func TestCheckInstall(t *testing.T) {
 			`{"matcher":"Edit|Write|MultiEdit","hooks":[` + hooks(edit) + `]}]}}`
 	}
 	toml := func(cmds ...string) string {
-		s := "model = \"o3\"\n[features]\ncodex_hooks = true\n\n[[hooks.PreToolUse]]\nmatcher = \"^Bash$\"\n"
-		for _, c := range cmds {
-			s += "\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = " + quote(c) + "\n"
+		s := "model = \"o3\"\n"
+		for _, m := range []string{"^Bash$", "^apply_patch$"} {
+			s += "\n[[hooks.PreToolUse]]\nmatcher = " + quote(m) + "\n"
+			for _, c := range cmds {
+				s += "\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = " + quote(c) + "\n"
+			}
 		}
 		return s + "\n[profiles.x]\ncommand = \"mdnav hook\"\n"
 	}
@@ -127,7 +152,7 @@ func TestCheckInstall(t *testing.T) {
 		{"claude no settings", AgentClaude, nil, 1, []string{"shell  mdnav    missing", "edit   mdnav    missing"}},
 		{"claude unreadable", AgentClaude, map[string]string{".claude/settings.json": `{"hooks":`}, 2, []string{"cannot read"}},
 		{"codex registered", AgentCodex, map[string]string{".codex/config.toml": toml(mdnavFor("codex"))}, 0,
-			[]string{"shell  mdnav    registered", "result: registered"}},
+			[]string{"shell  mdnav    registered", "edit   mdnav    registered", "result: registered"}},
 		{"codex today's mdnav", AgentCodex, map[string]string{".codex/config.toml": toml("mdnav hook")}, 1,
 			[]string{"shell  mdnav    different"}},
 		{"codex unreadable", AgentCodex, map[string]string{".codex/config.toml": "[[hooks.PreToolUse]\n"}, 2, []string{"cannot read"}},
@@ -138,7 +163,15 @@ func TestCheckInstall(t *testing.T) {
 		{"opencode plugin with old mdnav", AgentOpencode, map[string]string{".config/opencode/plugins/identuum-guard.js": "        hook('mdnav', ['hook'], payload, workdir, MDNAV_ENV);\n"}, 1,
 			[]string{"shell  mdnav    different", "edit   mdnav    different"}},
 		{"opencode not installed", AgentOpencode, nil, 1, []string{"shell  mdnav    missing"}},
-		{"agy unmeasured", AgentAgy, nil, 2, []string{"cannot read: agy is not measured"}},
+		{"codex hooks.json", AgentCodex, map[string]string{".codex/hooks.json": `{"hooks":{"PreToolUse":[{"matcher":"^Bash$","hooks":[{"type":"command","command":` + quote(mdnavFor("codex")) + `}]},{"matcher":"^apply_patch$","hooks":[{"type":"command","command":` + quote(mdnavFor("codex")) + `}]}]}}`}, 0,
+			[]string{"shell  mdnav    registered", "edit   mdnav    registered"}},
+		{"codex hooks.json unreadable", AgentCodex, map[string]string{".codex/hooks.json": `{`}, 2, []string{"cannot read"}},
+		{"agy registered", AgentAgy, map[string]string{".gemini/config/hooks.json": `{"$schema":"x","other":{"PreToolUse":[]},"mdnav":{"PreToolUse":[{"matcher":"run_command","hooks":[{"command":` + quote(mdnavFor("agy")) + `}]},{"matcher":"write_to_file|replace_file_content|multi_replace_file_content","hooks":[{"command":` + quote(mdnavFor("agy")) + `}]}]}}`}, 0,
+			[]string{"shell  mdnav    registered", "edit   mdnav    registered"}},
+		{"agy disabled", AgentAgy, map[string]string{".gemini/config/hooks.json": `{"mdnav":{"enabled":false,"PreToolUse":[{"matcher":"run_command","hooks":[{"command":` + quote(mdnavFor("agy")) + `}]}]}}`}, 1,
+			[]string{"shell  mdnav    missing"}},
+		{"agy not installed", AgentAgy, nil, 1, []string{"shell  mdnav    missing", "edit   mdnav    missing"}},
+		{"agy unreadable", AgentAgy, map[string]string{".gemini/config/hooks.json": `[`}, 2, []string{"cannot read"}},
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {

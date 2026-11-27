@@ -32,7 +32,7 @@ type Case struct {
 }
 
 // readable lists the agents with a read layer, fixture-backed or not.
-var readable = []string{AgentClaude, AgentCodex, AgentOpencode}
+var readable = []string{AgentClaude, AgentCodex, AgentOpencode, AgentAgy}
 
 // Runs returns the agents a case runs for.
 func (c Case) Runs() []string {
@@ -146,6 +146,9 @@ func (c Case) Input(agent, dir string) ([]byte, error) {
 	if oc {
 		tool = map[string]string{"Bash": "bash", "Edit": "edit", "MultiEdit": "multiedit", "Write": "write", "Patch": "apply_patch"}[c.Tool]
 	}
+	if agent == AgentAgy {
+		return c.agyInput(dir)
+	}
 	file := filepath.Join(dir, c.File)
 	var ti any
 	switch {
@@ -171,7 +174,38 @@ func (c Case) Input(agent, dir string) ([]byte, error) {
 	if oc {
 		return json.Marshal(map[string]any{"tool": tool, "args": ti, "cwd": dir, "sessionID": "case"})
 	}
+	if agent == AgentAgy {
+		return json.Marshal(map[string]any{"toolCall": map[string]any{"name": tool, "args": ti},
+			"stepIdx": 0, "conversationId": "case", "workspacePaths": []string{dir}})
+	}
 	return json.Marshal(map[string]any{"hook_event_name": "PreToolUse", "session_id": "case", "tool_name": tool, "tool_input": ti, "cwd": dir})
+}
+
+// agyInput renders a case as Antigravity sends it.
+func (c Case) agyInput(dir string) ([]byte, error) {
+	file := filepath.Join(dir, c.File)
+	var name string
+	var args any
+	switch {
+	case c.Bad:
+		name, args = map[string]string{"Bash": "run_command", "Edit": "replace_file_content"}[c.Tool], map[string]any{"CommandLine": 5, "TargetFile": 5}
+	case c.Tool == "Bash":
+		name, args = "run_command", map[string]any{"CommandLine": c.Command, "Cwd": dir, "WaitMsBeforeAsync": 5000}
+	case c.Tool == "Edit":
+		name, args = "replace_file_content", map[string]any{"TargetFile": file, "TargetContent": c.Edits[0].Old, "ReplacementContent": c.Edits[0].New}
+	case c.Tool == "MultiEdit":
+		var chunks []map[string]any
+		for _, e := range c.Edits {
+			chunks = append(chunks, map[string]any{"TargetContent": e.Old, "ReplacementContent": e.New})
+		}
+		name, args = "multi_replace_file_content", map[string]any{"TargetFile": file, "ReplacementChunks": chunks}
+	case c.Tool == "Write":
+		name, args = "write_to_file", map[string]any{"TargetFile": file, "CodeContent": "# Replaced\n", "Overwrite": true}
+	default:
+		return nil, fmt.Errorf("case tool %q has no Antigravity form", c.Tool)
+	}
+	return json.Marshal(map[string]any{"toolCall": map[string]any{"name": name, "args": args},
+		"stepIdx": 0, "conversationId": "case", "workspacePaths": []string{dir}})
 }
 
 // WriteFixture writes the case fixture into dir.

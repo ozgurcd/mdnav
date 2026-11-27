@@ -7,8 +7,18 @@ import (
 )
 
 // Write answers one judged call in agent's format and returns the exit
-// status. Only a denial writes: an allowed call exits 0 with no output.
+// status. For claude, codex and opencode only a denial writes; agy always
+// gets a decision.
 func Write(agent string, out Outcome, w io.Writer) (int, error) {
+	if agent == AgentAgy {
+		// Antigravity requires a decision; "allow" passes the call on to the
+		// next hook or the default policy.
+		resp := map[string]string{"decision": "allow"}
+		if out.Verdict == Deny {
+			resp = map[string]string{"decision": "deny", "reason": out.Reason}
+		}
+		return emit(w, resp)
+	}
 	if out.Verdict != Deny {
 		return 0, nil
 	}
@@ -24,6 +34,10 @@ func Write(agent string, out Outcome, w io.Writer) (int, error) {
 	default:
 		return 2, fmt.Errorf("%w for %s", ErrNoFixtures, agent)
 	}
+	return emit(w, resp)
+}
+
+func emit(w io.Writer, resp any) (int, error) {
 	if err := json.MarshalWrite(w, resp, json.Deterministic(true)); err != nil {
 		return 1, err
 	}

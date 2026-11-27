@@ -53,7 +53,6 @@ Recording (one session per agent; the recordings become fixtures):
 
 Install pack (the mdnav guard only):
   mdnav hook --print-install --agent AGENT          print AGENT's complete registration
-                                                    (exit 2 for agy until it is measured)
   mdnav hook --check-install --agent AGENT [--json] read only AGENT's hook registration and
       report the mdnav guard per tool group: registered | missing | different from
       --print-install. Exit 0 all registered, 1 missing or different, 2 cannot read.
