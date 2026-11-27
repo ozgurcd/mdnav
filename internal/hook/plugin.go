@@ -26,6 +26,7 @@ func opencodePlugin(getenv func(string) string) string {
 	}
 	b.WriteString(`import { spawnSync } from "node:child_process";
 
+const MDNAV = ` + jsonString(mdnavBinary()) + `;
 const ARGV = [` + argv + `];
 const ENV = {MDNAV_HOOK_MODE: "warn", MDNAV_CANNOT_LOG: ` + jsonString(LogPath(AgentOpencode, getenv)) + `};
 ` + opencodePluginBody)
@@ -51,7 +52,7 @@ export default {
       if (!TOOLS.has(event.tool)) return;
       const cwd = ctx.location.directory;
       const call = {tool: event.tool, args: slim(event.tool, event.input), cwd, sessionID: event.sessionID};
-      const r = spawnSync("mdnav", ARGV, {
+      const r = spawnSync(MDNAV, ARGV, {
         cwd, input: JSON.stringify(call), encoding: "utf8",
         env: {...process.env, ...ENV}, timeout: 5000, maxBuffer: 1024 * 1024,
       });

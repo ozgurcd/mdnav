@@ -45,7 +45,21 @@ func LogPath(agent string, getenv func(string) string) string {
 }
 
 func mdnavGuardCommand(agent string, getenv func(string) string) string {
-	return "env MDNAV_HOOK_MODE=warn MDNAV_CANNOT_LOG=" + LogPath(agent, getenv) + " mdnav hook --agent " + agent
+	return "env MDNAV_HOOK_MODE=warn MDNAV_CANNOT_LOG=" + LogPath(agent, getenv) + " " + word(mdnavBinary()) + " hook --agent " + agent
+}
+
+// mdnavBinary is the mdnav a registration runs: by default this binary's
+// absolute path, so an older mdnav earlier on PATH is never the one called.
+var mdnavBinary = executablePath
+
+func executablePath() string {
+	if p, err := os.Executable(); err == nil {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return r
+		}
+		return p
+	}
+	return "mdnav"
 }
 
 // groups returns agent's mdnav registration for shell and edit calls. agy
@@ -102,7 +116,7 @@ func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 		return 0
 	}
 	fmt.Fprintf(w, "# mdnav hook --print-install --agent %s\n", agent)
-	record := "mdnav hook --agent " + agent + " --record " + filepath.Join(stateDir(getenv), "record")
+	record := word(mdnavBinary()) + " hook --agent " + agent + " --record " + filepath.Join(stateDir(getenv), "record")
 	gs, err := groups(agent, getenv)
 	if err != nil {
 		fmt.Fprintf(w, "# %v\n", err)

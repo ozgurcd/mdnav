@@ -239,6 +239,7 @@ const goldenOpencode = `// mdnav-guard: makes opencode agents use mdnav for Mark
 // fixtures; then install this file again.
 import { spawnSync } from "node:child_process";
 
+const MDNAV = "mdnav";
 const ARGV = ["hook", "--agent", "opencode", "--record", "/h/.local/state/mdnav/record"];
 const ENV = {MDNAV_HOOK_MODE: "warn", MDNAV_CANNOT_LOG: "/h/.local/state/mdnav/opencode-mdnav-cannot.log"};
 // The tools mdnav judges; every other tool passes without a call.
@@ -260,7 +261,7 @@ export default {
       if (!TOOLS.has(event.tool)) return;
       const cwd = ctx.location.directory;
       const call = {tool: event.tool, args: slim(event.tool, event.input), cwd, sessionID: event.sessionID};
-      const r = spawnSync("mdnav", ARGV, {
+      const r = spawnSync(MDNAV, ARGV, {
         cwd, input: JSON.stringify(call), encoding: "utf8",
         env: {...process.env, ...ENV}, timeout: 5000, maxBuffer: 1024 * 1024,
       });
@@ -277,3 +278,26 @@ export default {
   },
 };
 `
+
+// TestMain pins the mdnav binary the registrations name, so the goldens do
+// not depend on where the test binary was built.
+func TestMain(m *testing.M) {
+	mdnavBinary = func() string { return "mdnav" }
+	os.Exit(m.Run())
+}
+
+// TestBinaryPath checks that registrations name the binary that printed
+// them by its absolute path, so an older mdnav earlier on PATH is not run.
+func TestBinaryPath(t *testing.T) {
+	old := mdnavBinary
+	mdnavBinary = executablePath
+	defer func() { mdnavBinary = old }()
+	exe, _ := os.Executable()
+	env := fakeEnv(map[string]string{"HOME": "/h"})
+	if got := mdnavGuardCommand(AgentClaude, env); !filepath.IsAbs(exe) || !strings.Contains(got, " "+exe+" hook --agent claude") {
+		t.Fatalf("command %q does not name %q", got, exe)
+	}
+	if got := opencodePlugin(env); !strings.Contains(got, "const MDNAV = "+jsonString(exe)+";") {
+		t.Fatalf("plugin does not name %q", exe)
+	}
+}
