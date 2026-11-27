@@ -87,7 +87,7 @@ func TestWrite(t *testing.T) {
 	}{
 		{AgentClaude, deny, 0, `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"use mdnav"}}` + "\n"},
 		{AgentCodex, deny, 0, `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"use mdnav"}}` + "\n"},
-		{AgentOpencode, deny, 0, `{"decision":"deny","reason":"use mdnav"}` + "\n"},
+		{AgentOpencode, deny, 0, `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"use mdnav"}}` + "\n"},
 		{AgentAgy, deny, 2, ""},
 		{AgentClaude, Outcome{Verdict: Warn, Reason: "x"}, 0, ""},
 		{AgentOpencode, Outcome{Verdict: Allow}, 0, ""},

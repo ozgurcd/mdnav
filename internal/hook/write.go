@@ -14,14 +14,13 @@ func Write(agent string, out Outcome, w io.Writer) (int, error) {
 	}
 	var resp any
 	switch agent {
-	case AgentClaude, AgentCodex:
+	case AgentClaude, AgentCodex, AgentOpencode:
+		// The opencode guard plugin reads the same deny JSON as Claude.
 		resp = map[string]any{"hookSpecificOutput": map[string]string{
 			"hookEventName":            "PreToolUse",
 			"permissionDecision":       "deny",
 			"permissionDecisionReason": out.Reason,
 		}}
-	case AgentOpencode:
-		resp = map[string]string{"decision": "deny", "reason": out.Reason}
 	default:
 		return 2, fmt.Errorf("%w for %s", ErrNoFixtures, agent)
 	}

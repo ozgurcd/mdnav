@@ -137,30 +137,16 @@ func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 		fmt.Fprintf(w, "# opencode runs no command hooks: the guard plugin calls mdnav.\n# Plugin: %s\n", OpencodePlugin)
 		if unbacked {
 			fmt.Fprintf(w, "# mdnav refuses --agent opencode (exit 2) until opencode has fixtures, and the\n"+
-				"# call below throws on any non-zero exit, blocking every tool. Until then add\n"+
-				"# --record %s to MDNAV_CMD.\n", filepath.Join(stateDir(getenv), "record"))
+				"# call below denies on any non-zero exit, blocking every tool. Until then add\n"+
+				"# \"--record\", %s to MDNAV_CMD.\n", jsonString(filepath.Join(stateDir(getenv), "record")))
 		}
 		var words []string
 		for _, f := range strings.Fields(mdnavGuardCommand(agent, getenv)) {
 			words = append(words, jsonString(f))
 		}
-		fmt.Fprint(w, "#\n# 1. Add to identuum-guard.js, and call it in tool.execute.before in the bash\n"+
-			"#    branch and in the edit/write branch:\n")
-		fmt.Fprintf(w, "const MDNAV_CMD = [%s]\n", strings.Join(words, ", "))
-		fmt.Fprint(w, "async function mdnavGuard($, input, output, directory) {\n"+
-			"  const call = JSON.stringify({tool: input.tool, args: output.args, cwd: directory, sessionID: input.sessionID})\n"+
-			"  const r = await $`${MDNAV_CMD} < ${new Response(call)}`.nothrow().quiet()\n"+
-			"  if (r.exitCode !== 0) throw new Error(\"mdnav hook: \" + r.stderr.toString())\n"+
-			"  const out = r.stdout.toString().trim()\n"+
-			"  if (out && JSON.parse(out).decision === \"deny\") throw new Error(JSON.parse(out).reason)\n"+
-			"}\n#\n# 2. Add to identuum-guard.test.mjs:\n"+
-			"test(\"mdnav hook --agent opencode denies cat of a Markdown file\", () => {\n"+
-			"  const dir = mkdtempSync(join(tmpdir(), \"mdnav-guard-\"))\n"+
-			"  writeFileSync(join(dir, \"a.md\"), \"# A\\n\")\n"+
-			"  const call = JSON.stringify({tool: \"bash\", args: {command: \"cat a.md\"}, cwd: dir})\n"+
-			"  const out = execFileSync(\"mdnav\", [\"hook\", \"--agent\", \"opencode\"], {input: call, env: {...process.env, MDNAV_HOOK_MODE: \"deny\"}}).toString()\n"+
-			"  assert.equal(JSON.parse(out).decision, \"deny\")\n"+
-			"})\n#\n# 3. Install the plugin:\n")
+		fmt.Fprint(w, opencodeStep1)
+		fmt.Fprintf(w, "const MDNAV_CMD = [%s];\n", strings.Join(words, ", "))
+		fmt.Fprint(w, opencodeRest)
 		fmt.Fprintf(w, "cp %s %s\n", OpencodePlugin, configPath(agent, getenv))
 	}
 	return 0
@@ -455,3 +441,9 @@ func tomlString(v string) (string, error) {
 	}
 	return "", errors.New("not a string")
 }
+
+// opencodeStep1 and opencodeRest are the fixed parts of the opencode
+// install text, around the MDNAV_CMD line.
+const opencodeStep1 = "#\n# 1. Add to identuum-guard.js. In tool.execute.before, call mdnavGuard(input,\n#    output, directory) once per tool call, after the other hooks, in the bash\n#    branch and in the edit/write/multiedit/apply_patch branch. It sends\n#    opencode's own tool name and args, not the Claude-shaped payload the\n#    other hooks get, and reads the same Claude-shaped deny JSON they answer.\n"
+
+const opencodeRest = "function mdnavGuard(input, output, directory) {\n  const call = JSON.stringify({tool: input.tool, args: output.args, cwd: directory, sessionID: input.sessionID});\n  const r = childProcess.spawnSync(MDNAV_CMD[0], MDNAV_CMD.slice(1), {\n    cwd: directory, input: call, encoding: 'utf8', timeout: 5000, maxBuffer: 1024 * 1024, shell: false,\n  });\n  if (r.error || r.signal || r.status !== 0 || /WARNING/i.test(r.stderr)) {\n    throw new Error(`identuum-guard: mdnav hook failed: ${r.error?.message ?? r.stderr}`);\n  }\n  const out = r.stdout.trim();\n  if (!out) return;\n  let d;\n  try { d = JSON.parse(out).hookSpecificOutput; } catch { throw new Error('identuum-guard: mdnav hook printed invalid JSON'); }\n  if (d?.permissionDecision === 'deny') throw new Error(`identuum-guard: ${d.permissionDecisionReason}`);\n  throw new Error('identuum-guard: mdnav hook printed an unknown result');\n}\n#\n# 2. Add to identuum-guard.test.mjs:\ntest('mdnav hook runs last, once, with opencode tool name and args', async t => {\n  const calls = [];\n  t.mock.method(childProcess, 'spawnSync', (bin, args, opts) => {\n    calls.push({argv: [bin, ...args], payload: JSON.parse(opts.input)});\n    return {status: 0, stdout: '', stderr: ''};\n  });\n  const guard = await IdentuumGuard({directory: workspace});\n  await guard['tool.execute.before']({tool: 'bash', sessionID: 'fixture'}, {args: {command: 'cat README.md', workdir: root}});\n  assert.deepEqual(calls.at(-1).argv.slice(-4), ['mdnav', 'hook', '--agent', 'opencode']);\n  assert.deepEqual(calls.at(-1).payload, {tool: 'bash', args: {command: 'cat README.md', workdir: root}, cwd: workspace, sessionID: 'fixture'});\n  calls.length = 0;\n  const patchText = '*** Begin Patch\\n*** Update File: a.md\\n*** Delete File: b.md\\n*** End Patch';\n  await guard['tool.execute.before']({tool: 'apply_patch', sessionID: 'fixture'}, {args: {patchText}});\n  const mdnav = calls.filter(c => c.argv.includes('mdnav'));\n  assert.equal(mdnav.length, 1);\n  assert.deepEqual(mdnav[0].payload.args, {patchText});\n});\n\ntest('mdnav denial keeps its reason', async t => {\n  t.mock.method(childProcess, 'spawnSync', bin => bin === 'env'\n    ? {status: 0, stdout: '{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"use mdnav get\"}}', stderr: ''}\n    : {status: 0, stdout: '', stderr: ''});\n  await assert.rejects(invoke(shell('cat README.md')), /identuum-guard: use mdnav get/);\n});\n#\n# 3. In identuum-guard.test.mjs, the mdnav call changes two existing tests:\n#    'payload mapping, working directory and hook ordering': calls.length is 3\n#      for bash, calls[2] is mdnav; the write payload check stays calls[0].\n#    'patch maps every source, destination and deletion before allowing':\n#      map only calls that carry tool_input (calls.filter(p => p.tool_input)).\n#\n# 4. Install the plugin:\n"
