@@ -157,7 +157,7 @@ func TestMainCLI(t *testing.T) {
 		{"unknown agent", []string{"--agent", "cursor"}, bash, 2, `unknown agent "cursor"`},
 		{"unknown flag", []string{"--nope"}, bash, 2, "unknown argument"},
 		{"default claude", nil, bash, 0, ""},
-		{"codex refused", []string{"--agent=codex"}, bash, 2, "no fixture-backed format for codex"},
+		{"codex judged", []string{"--agent=codex"}, bash, 0, ""},
 		{"opencode judged", []string{"--agent", "opencode"}, `{"tool":"shell","args":{"command":"ls"},"cwd":"/w"}`, 0, ""},
 		{"agy refused", []string{"--agent", "agy"}, `{}`, 2, "no fixture-backed format for agy"},
 		{"agy records", []string{"--agent", "agy", "--record", rec}, `{"toolCall":{"id":"1","content":"` + long + `"},"cwd":"/w"}`, 0, ""},
@@ -228,8 +228,8 @@ func TestReplayFixtures(t *testing.T) {
 	if counts[AgentClaude] != 1 || counts[AgentAgy] != 0 {
 		t.Fatalf("counts %v", counts)
 	}
-	if !errors.Is(func() error { _, err := Read(AgentCodex, nil); return err }(), ErrNoFixtures) {
-		t.Fatal("codex is not gated")
+	if !errors.Is(func() error { _, err := Read(AgentAgy, nil); return err }(), ErrNoFixtures) {
+		t.Fatal("agy is not gated")
 	}
 }
 

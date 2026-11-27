@@ -23,7 +23,7 @@ var Agents = []string{AgentClaude, AgentCodex, AgentOpencode, AgentAgy}
 // fixtureBacked lists the agents whose read layer is backed by recorded
 // fixtures. Every other agent is refused until its recordings are in the
 // fixture folder and it is added here.
-var fixtureBacked = map[string]bool{AgentClaude: true, AgentOpencode: true}
+var fixtureBacked = map[string]bool{AgentClaude: true, AgentCodex: true, AgentOpencode: true}
 
 // Tool kinds of an Event.
 const (

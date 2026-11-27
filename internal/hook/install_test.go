@@ -48,10 +48,6 @@ func TestPrintInstall(t *testing.T) {
 # File: /h/.codex/config.toml (or the same groups in /h/.codex/hooks.json; not both)
 # Codex sends Bash and apply_patch to PreToolUse; apply_patch carries the patch
 # in tool_input.command.
-# mdnav refuses --agent codex (exit 2, which blocks the call in Codex) until
-# codex has fixtures; until then use
-#   mdnav hook --agent codex --record /h/.local/state/mdnav/record
-# as the mdnav command.
 
 [[hooks.PreToolUse]]
 matcher = "^Bash$"

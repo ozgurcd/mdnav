@@ -1,0 +1,13 @@
+{
+	"session_id": "01a21ded-89b2-7593-bc3d-06abd8966559",
+	"turn_id": "01a21ded-a029-7481-9e7e-c574667a8bf9",
+	"cwd": "/private/tmp/mdnav-fx",
+	"hook_event_name": "PreToolUse",
+	"model": "gpt-6.1-sol",
+	"permission_mode": "default",
+	"tool_name": "Bash",
+	"tool_input": {
+		"command": "cat notes.txt"
+	},
+	"tool_use_id": "exec-1bba6e26-2307-4659-b4a5-1814b38e7584"
+}

@@ -1,0 +1,13 @@
+{
+	"session_id": "01a21ded-89b2-7593-bc3d-06abd8966559",
+	"turn_id": "01a21ded-a029-7481-9e7e-c574667a8bf9",
+	"cwd": "/private/tmp/mdnav-fx",
+	"hook_event_name": "PreToolUse",
+	"model": "gpt-6.1-sol",
+	"permission_mode": "default",
+	"tool_name": "apply_patch",
+	"tool_input": {
+		"command": "*** Begin Patch\n*** Update File: /private/tmp/mdnav-fx/main.go\n@@\n+// test\n*** End Patch"
+	},
+	"tool_use_id": "exec-77f537bf-8b7b-4280-9c2e-881e202e4935"
+}
