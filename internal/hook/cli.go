@@ -44,7 +44,8 @@ Recording (one session per agent; the recordings become fixtures):
   mdnav hook --write-fixture /tmp/mdnav-fx, start the agent in /tmp/mdnav-fx with
   the hook command "mdnav hook --agent AGENT --record DIR", and have it read,
   search, edit, write, patch and create README.md and docs/guide.md. Files are
-  0600 in a 0700 DIR; file content is cut to 4 KiB, commands and patches are kept.
+  0600 in a 0700 DIR; file content is cut to 4 KiB, environment values are
+  dropped and token-like strings redacted; commands and patches are kept.
   Move each recording to <fixtures>/<agent>/ and add <name>.want holding
   "<verdict> <tool_kind>", such as "deny edit". Fixture folder default:
   ` + DefaultFixtures + `

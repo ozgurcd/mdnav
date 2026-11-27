@@ -197,7 +197,8 @@ denied; `deny` denies. `MDNAV_CANNOT_LOG=FILE` appends one tab-separated line
 per escape and per warn-mode denial: time, cwd, reason, command, agent.
 
 `mdnav hook --record DIR` writes each raw input to `DIR/<agent>-<time>.json`
-(file 0600, directory 0700; file content cut to 4 KiB) and allows the call.
+(file 0600, directory 0700; file content cut to 4 KiB, environment values
+dropped, token-like strings redacted) and allows the call.
 The recordings become fixtures in `<fixtures>/<agent>/`, each with a
 `<name>.want` file holding `<verdict> <tool_kind>`. `mdnav hook --selftest
 [--fixtures DIR]` runs the decision table for every agent, running each

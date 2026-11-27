@@ -194,3 +194,42 @@ func TestReplayFixtures(t *testing.T) {
 		t.Fatal("codex is not gated")
 	}
 }
+
+// TestRecordRedacts is the recording table: what a recording must drop and
+// what it must keep.
+func TestRecordRedacts(t *testing.T) {
+	rows := []struct {
+		name, raw  string
+		drop, keep []string
+	}{
+		{"env values", `{"toolCall":{"env":{"API_KEY":"s3cret-value","HOME":"/h"},"command":"ls"}}`,
+			[]string{"s3cret-value", `"/h"`}, []string{`"API_KEY"`, `"ls"`, "mdnav_record_redacted"}},
+		{"bearer header", `{"tool_input":{"command":"curl -H 'Authorization: Bearer abcdef0123456789abcdef' x"}}`,
+			[]string{"abcdef0123456789abcdef"}, []string{"curl -H", "mdnav_record_redacted"}},
+		{"token assignment", `{"tool_input":{"command":"GITHUB_TOKEN=ghp_0123456789abcdefghij0123 gh pr list"}}`,
+			[]string{"ghp_0123456789abcdefghij0123"}, []string{"GITHUB_TOKEN=", "gh pr list"}},
+		{"api key shapes", `{"a":"sk-ant-0123456789abcdefghij","b":"AKIA0123456789ABCDEF","c":"xoxb-0123456789-abc"}`,
+			[]string{"sk-ant-0123456789abcdefghij", "AKIA0123456789ABCDEF", "xoxb-0123456789-abc"}, nil},
+		{"plain call kept whole", `{"tool_input":{"command":"cat docs/guide.md"}}`,
+			[]string{"mdnav_record_redacted"}, []string{"cat docs/guide.md"}},
+	}
+	for _, r := range rows {
+		t.Run(r.name, func(t *testing.T) {
+			p, err := Record(filepath.Join(t.TempDir(), "rec"), AgentClaude, []byte(r.raw), time.Unix(0, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, _ := os.ReadFile(p)
+			for _, s := range r.drop {
+				if strings.Contains(string(got), s) {
+					t.Errorf("recording keeps %q:\n%s", s, got)
+				}
+			}
+			for _, s := range r.keep {
+				if !strings.Contains(string(got), s) {
+					t.Errorf("recording lost %q:\n%s", s, got)
+				}
+			}
+		})
+	}
+}
