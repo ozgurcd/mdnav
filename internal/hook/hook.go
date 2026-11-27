@@ -44,7 +44,7 @@ type decision struct {
 // denied in either mode.
 func Evaluate(ev Event, warn bool, now time.Time) Outcome {
 	var d decision
-	what := ev.Tool
+	var what string
 	escape, vague := "", false
 	if ev.Unread != "" && ev.Kind != KindRead && ev.Kind != KindOther {
 		return Outcome{Verdict: Deny, Reason: "mdnav hook: cannot read the " + ev.Agent + " " + ev.Tool +
