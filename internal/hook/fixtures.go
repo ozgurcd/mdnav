@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// DefaultFixtures is the shared fixture folder of mdnav, gograph and achta
-// hooks: one folder per agent of recordings made with --record.
+// DefaultFixtures is the hook fixture folder: one folder per agent of
+// recordings made with --record.
 const DefaultFixtures = "/Users/odemir/Development/identuum/wiki/contracts/hook-fixtures"
 
 // A fixture is <dir>/<agent>/<name>.json, a recording, with

@@ -25,15 +25,12 @@ func TestPrintInstall(t *testing.T) {
 	}{
 		{AgentClaude, 0, `# mdnav hook --print-install --agent claude
 # File: /h/.claude/settings.json (merge into "hooks"; keep every other key)
-# Guards, in order: gograph, achta hook cd (shell only), mdnav
 {
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
-          {"type": "command", "command": "/Users/odemir/Development/identuum/wiki/tools/gograph-first-hook-wrapper.sh"},
-          {"type": "command", "command": "achta hook cd"},
           {"type": "command", "command": "` + mdnavFor("claude") + `"}
         ]
       },
@@ -49,7 +46,6 @@ func TestPrintInstall(t *testing.T) {
 `},
 		{AgentCodex, 0, `# mdnav hook --print-install --agent codex
 # File: /h/.codex/config.toml
-# Guards, in order: gograph, achta hook cd (shell only), mdnav
 # apply_patch: not measured whether Codex sends it to hooks, so there is no
 # apply_patch matcher until a fixture shows it.
 # Check the keys against the Codex hooks docs; they were not reachable when
@@ -65,29 +61,20 @@ matcher = "^Bash$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/Users/odemir/Development/identuum/wiki/tools/gograph-first-hook-wrapper.sh"
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "achta hook cd"
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
 command = "` + mdnavFor("codex") + `"
 
 # Owner step: start codex once interactively and trust the new hooks. Lanes run
 # non-interactively and skip untrusted hooks.
 `},
 		{AgentOpencode, 0, `# mdnav hook --print-install --agent opencode
-# opencode runs no command hooks: the guard plugin calls each guard.
+# opencode runs no command hooks: the guard plugin calls mdnav.
 # Plugin: /Users/odemir/Development/identuum/wiki/tools/opencode/identuum-guard.js
-# Guards, in order: gograph, achta hook cd (shell only), mdnav
 # mdnav refuses --agent opencode (exit 2) until opencode has fixtures, and the
 # call below throws on any non-zero exit, blocking every tool. Until then add
 # --record /h/.local/state/mdnav/record to MDNAV_CMD.
 #
-# 1. Add to identuum-guard.js, and call it in tool.execute.before after the
-#    gograph and achta calls of the bash branch, and in the edit/write branch:
+# 1. Add to identuum-guard.js, and call it in tool.execute.before in the bash
+#    branch and in the edit/write branch:
 const MDNAV_CMD = ["env", "MDNAV_HOOK_MODE=warn", "MDNAV_CANNOT_LOG=/h/.local/state/mdnav/opencode-mdnav-cannot.log", "mdnav", "hook", "--agent", "opencode"]
 async function mdnavGuard($, input, output, directory) {
   const call = JSON.stringify({tool: input.tool, args: output.args, cwd: directory, sessionID: input.sessionID})
@@ -131,7 +118,6 @@ cp /Users/odemir/Development/identuum/wiki/tools/opencode/identuum-guard.js /h/.
 // TestCheckInstall is the --check-install table: registered, missing,
 // different and unreadable per agent.
 func TestCheckInstall(t *testing.T) {
-	gograph := GographCommand
 	settings := func(shell, edit []string) string {
 		hooks := func(cmds []string) string {
 			var parts []string
@@ -153,7 +139,7 @@ func TestCheckInstall(t *testing.T) {
 	}
 	home := t.TempDir()
 	mdnavFor := func(agent string) string { return mdnavIn(home, agent) }
-	all := []string{gograph, AchtaCommand, mdnavFor("claude")}
+	all := []string{mdnavFor("claude")}
 	rows := []struct {
 		name, agent string
 		files       map[string]string
@@ -161,23 +147,25 @@ func TestCheckInstall(t *testing.T) {
 		want        []string // lines the report must hold
 	}{
 		{"claude registered", AgentClaude, map[string]string{".claude/settings.json": settings(all, []string{mdnavFor("claude")})}, 0,
-			[]string{"shell  gograph  registered", "shell  achta    registered", "shell  mdnav    registered", "edit   mdnav    registered", "result: registered"}},
-		{"claude today's mdnav", AgentClaude, map[string]string{".claude/settings.json": settings([]string{gograph, AchtaCommand, "mdnav hook"}, []string{"mdnav hook"})}, 1,
+			[]string{"shell  mdnav    registered", "edit   mdnav    registered", "result: registered"}},
+		{"claude today's mdnav", AgentClaude, map[string]string{".claude/settings.json": settings([]string{"mdnav hook"}, []string{"mdnav hook"})}, 1,
 			[]string{"shell  mdnav    different", "edit   mdnav    different", "result: missing or different"}},
-		{"claude no edit group", AgentClaude, map[string]string{".claude/settings.json": `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"achta hook cd"}]}]}}`}, 1,
-			[]string{"shell  gograph  missing", "shell  achta    registered", "edit   mdnav    missing"}},
-		{"claude no settings", AgentClaude, nil, 1, []string{"shell  gograph  missing", "edit   mdnav    missing"}},
+		{"claude bash only", AgentClaude, map[string]string{".claude/settings.json": settings([]string{mdnavFor("claude")}, nil)}, 1,
+			[]string{"shell  mdnav    registered", "edit   mdnav    missing"}},
+		{"claude no settings", AgentClaude, nil, 1, []string{"shell  mdnav    missing", "edit   mdnav    missing"}},
 		{"claude unreadable", AgentClaude, map[string]string{".claude/settings.json": `{"hooks":`}, 2, []string{"cannot read"}},
-		{"codex registered", AgentCodex, map[string]string{".codex/config.toml": toml(gograph, AchtaCommand, mdnavFor("codex"))}, 0,
-			[]string{"shell  gograph  registered", "shell  mdnav    registered", "result: registered"}},
-		{"codex mdnav only", AgentCodex, map[string]string{".codex/config.toml": toml("mdnav hook")}, 1,
-			[]string{"shell  gograph  missing", "shell  achta    missing", "shell  mdnav    different"}},
+		{"codex registered", AgentCodex, map[string]string{".codex/config.toml": toml(mdnavFor("codex"))}, 0,
+			[]string{"shell  mdnav    registered", "result: registered"}},
+		{"codex today's mdnav", AgentCodex, map[string]string{".codex/config.toml": toml("mdnav hook")}, 1,
+			[]string{"shell  mdnav    different"}},
 		{"codex unreadable", AgentCodex, map[string]string{".codex/config.toml": "[[hooks.PreToolUse]\n"}, 2, []string{"cannot read"}},
-		{"opencode plugin with mdnav", AgentOpencode, map[string]string{".config/opencode/plugins/identuum-guard.js": "run(`" + gograph + "`); run(`achta hook cd`); const MDNAV_CMD = [\"mdnav\", \"hook\", \"--agent\", \"opencode\"]"}, 0,
-			[]string{"shell  gograph  registered", "edit   mdnav    registered"}},
-		{"opencode plugin without mdnav", AgentOpencode, map[string]string{".config/opencode/plugins/identuum-guard.js": "run(`" + gograph + "`); run(`achta hook cd`)"}, 1,
-			[]string{"shell  achta    registered", "shell  mdnav    missing", "edit   mdnav    missing"}},
-		{"opencode not installed", AgentOpencode, nil, 1, []string{"shell  gograph  missing"}},
+		{"opencode plugin with mdnav", AgentOpencode, map[string]string{".config/opencode/plugins/identuum-guard.js": "const MDNAV_CMD = [\"mdnav\", \"hook\", \"--agent\", \"opencode\"]"}, 0,
+			[]string{"shell  mdnav    registered", "edit   mdnav    registered"}},
+		{"opencode plugin without mdnav", AgentOpencode, map[string]string{".config/opencode/plugins/identuum-guard.js": "run(`other guard`)"}, 1,
+			[]string{"shell  mdnav    missing", "edit   mdnav    missing"}},
+		{"opencode plugin with old mdnav", AgentOpencode, map[string]string{".config/opencode/plugins/identuum-guard.js": "$`mdnav hook`"}, 1,
+			[]string{"shell  mdnav    different"}},
+		{"opencode not installed", AgentOpencode, nil, 1, []string{"shell  mdnav    missing"}},
 		{"agy unmeasured", AgentAgy, nil, 2, []string{"cannot read: agy is not measured"}},
 	}
 	for _, r := range rows {

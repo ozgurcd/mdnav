@@ -12,16 +12,12 @@ import (
 	"strings"
 )
 
-// The guards an install registers, in order, as installed today.
-const (
-	GographCommand = "/Users/odemir/Development/identuum/wiki/tools/gograph-first-hook-wrapper.sh"
-	AchtaCommand   = "achta hook cd"
-	OpencodePlugin = "/Users/odemir/Development/identuum/wiki/tools/opencode/identuum-guard.js"
-)
+// OpencodePlugin is the guard plugin opencode loads; the mdnav call goes in it.
+const OpencodePlugin = "/Users/odemir/Development/identuum/wiki/tools/opencode/identuum-guard.js"
 
 // guard is one hook command in a tool group.
 type guard struct {
-	Name    string // gograph, achta or mdnav
+	Name    string // mdnav
 	Command string
 }
 
@@ -54,11 +50,11 @@ func mdnavGuardCommand(agent string, getenv func(string) string) string {
 	return "env MDNAV_HOOK_MODE=warn MDNAV_CANNOT_LOG=" + LogPath(agent, getenv) + " mdnav hook --agent " + agent
 }
 
-// groups returns agent's registration: gograph, achta and mdnav for shell
-// calls, mdnav for edit calls. agy has none until it is measured.
+// groups returns agent's mdnav registration for shell and edit calls. agy
+// has none until it is measured.
 func groups(agent string, getenv func(string) string) ([]group, error) {
 	m := guard{"mdnav", mdnavGuardCommand(agent, getenv)}
-	shell := []guard{{"gograph", GographCommand}, {"achta", AchtaCommand}, m}
+	shell := []guard{m}
 	switch agent {
 	case AgentClaude:
 		return []group{{"shell", "Bash", shell}, {"edit", "Edit|Write|MultiEdit", []guard{m}}}, nil
@@ -94,9 +90,7 @@ func configPath(agent string, getenv func(string) string) string {
 	return ""
 }
 
-const guardOrder = "# Guards, in order: gograph, achta hook cd (shell only), mdnav\n"
-
-// PrintInstall prints agent's complete guard registration and returns the
+// PrintInstall prints agent's complete mdnav registration and returns the
 // exit status: 0, or 2 for an agent that is not measured.
 func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 	fmt.Fprintf(w, "# mdnav hook --print-install --agent %s\n", agent)
@@ -111,7 +105,7 @@ func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 	unbacked := !fixtureBacked[agent]
 	switch agent {
 	case AgentClaude:
-		fmt.Fprintf(w, "# File: %s (merge into \"hooks\"; keep every other key)\n%s", configPath(agent, getenv), guardOrder)
+		fmt.Fprintf(w, "# File: %s (merge into \"hooks\"; keep every other key)\n", configPath(agent, getenv))
 		fmt.Fprint(w, "{\n  \"hooks\": {\n    \"PreToolUse\": [\n")
 		for i, g := range gs {
 			fmt.Fprintf(w, "      {\n        \"matcher\": %s,\n        \"hooks\": [\n", jsonString(g.Matcher))
@@ -122,7 +116,7 @@ func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 		}
 		fmt.Fprint(w, "    ]\n  }\n}\n")
 	case AgentCodex:
-		fmt.Fprintf(w, "# File: %s\n%s", configPath(agent, getenv), guardOrder)
+		fmt.Fprintf(w, "# File: %s\n", configPath(agent, getenv))
 		fmt.Fprint(w, "# apply_patch: not measured whether Codex sends it to hooks, so there is no\n"+
 			"# apply_patch matcher until a fixture shows it.\n"+
 			"# Check the keys against the Codex hooks docs; they were not reachable when\n"+
@@ -140,7 +134,7 @@ func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 		fmt.Fprint(w, "\n# Owner step: start codex once interactively and trust the new hooks. Lanes run\n"+
 			"# non-interactively and skip untrusted hooks.\n")
 	case AgentOpencode:
-		fmt.Fprintf(w, "# opencode runs no command hooks: the guard plugin calls each guard.\n# Plugin: %s\n%s", OpencodePlugin, guardOrder)
+		fmt.Fprintf(w, "# opencode runs no command hooks: the guard plugin calls mdnav.\n# Plugin: %s\n", OpencodePlugin)
 		if unbacked {
 			fmt.Fprintf(w, "# mdnav refuses --agent opencode (exit 2) until opencode has fixtures, and the\n"+
 				"# call below throws on any non-zero exit, blocking every tool. Until then add\n"+
@@ -150,8 +144,8 @@ func PrintInstall(w io.Writer, agent string, getenv func(string) string) int {
 		for _, f := range strings.Fields(mdnavGuardCommand(agent, getenv)) {
 			words = append(words, jsonString(f))
 		}
-		fmt.Fprint(w, "#\n# 1. Add to identuum-guard.js, and call it in tool.execute.before after the\n"+
-			"#    gograph and achta calls of the bash branch, and in the edit/write branch:\n")
+		fmt.Fprint(w, "#\n# 1. Add to identuum-guard.js, and call it in tool.execute.before in the bash\n"+
+			"#    branch and in the edit/write branch:\n")
 		fmt.Fprintf(w, "const MDNAV_CMD = [%s]\n", strings.Join(words, ", "))
 		fmt.Fprint(w, "async function mdnavGuard($, input, output, directory) {\n"+
 			"  const call = JSON.stringify({tool: input.tool, args: output.args, cwd: directory, sessionID: input.sessionID})\n"+
@@ -198,14 +192,8 @@ type entry struct {
 	Commands []string
 }
 
-// signature tells which guard a command is.
-func signature(name, cmd string) bool {
-	switch name {
-	case "gograph":
-		return strings.Contains(cmd, "gograph")
-	case "achta":
-		return strings.Contains(cmd, "achta hook cd")
-	}
+// signature tells whether a command is an mdnav hook.
+func signature(cmd string) bool {
 	return strings.Contains(cmd, "mdnav hook") || strings.Contains(cmd, `"mdnav", "hook"`)
 }
 
@@ -245,7 +233,7 @@ func status(g group, gd guard, entries []entry) string {
 			if e.Matcher == g.Matcher && c == gd.Command {
 				return Registered
 			}
-			if signature(gd.Name, c) {
+			if signature(c) {
 				found = true
 			}
 		}
@@ -256,22 +244,20 @@ func status(g group, gd guard, entries []entry) string {
 	return Missing
 }
 
-// pluginStatus judges one guard against the installed opencode plugin's
+// pluginStatus judges the mdnav call in the installed opencode plugin's
 // text: the plugin's branches are not parsed.
-func pluginStatus(gd guard, src string) string {
+func pluginStatus(src string) string {
 	switch {
-	case gd.Name != "mdnav" && strings.Contains(src, gd.Command):
+	case strings.Contains(src, `"mdnav", "hook", "--agent", "opencode"`):
 		return Registered
-	case gd.Name == "mdnav" && strings.Contains(src, `"mdnav", "hook", "--agent", "opencode"`):
-		return Registered
-	case signature(gd.Name, src):
+	case signature(src):
 		return Different
 	}
 	return Missing
 }
 
-// CheckInstall reads agent's hook registration and reports each guard of
-// each group as registered, missing or different from --print-install. It
+// CheckInstall reads agent's hook registration and reports the mdnav guard
+// of each group as registered, missing or different from --print-install. It
 // returns 0 when all are registered, 1 when one is not, 2 when the
 // registration cannot be read.
 func CheckInstall(w io.Writer, agent string, asJSON bool, getenv func(string) string) int {
@@ -314,7 +300,7 @@ func CheckInstall(w io.Writer, agent string, asJSON bool, getenv func(string) st
 			for _, gd := range g.Guards {
 				var st string
 				if agent == AgentOpencode {
-					st = pluginStatus(gd, src)
+					st = pluginStatus(src)
 				} else {
 					st = status(g, gd, entries)
 				}

@@ -51,17 +51,17 @@ Recording (one session per agent; the recordings become fixtures):
   "<verdict> <tool_kind>", such as "deny edit". Fixture folder default:
   ` + DefaultFixtures + `
 
-Install pack (gograph, achta hook cd and mdnav guards, in that order):
+Install pack (the mdnav guard only):
   mdnav hook --print-install --agent AGENT          print AGENT's complete registration
                                                     (exit 2 for agy until it is measured)
   mdnav hook --check-install --agent AGENT [--json] read only AGENT's hook registration and
-      report each guard per tool group: registered | missing | different from
+      report the mdnav guard per tool group: registered | missing | different from
       --print-install. Exit 0 all registered, 1 missing or different, 2 cannot read.
   nuntius lanes start each agent with the owner's config, so a registration
   checked here covers that agent's lanes too.
 
 Lane proof (after install): one short lane per agent runs "cat <a .md file>"
-and one text search of a .go file. Each must be denied (deny mode) or appear
+and one text search of a .md file. Each must be denied (deny mode) or appear
 in that agent's MDNAV_CANNOT_LOG (warn mode), the line ending in the agent.
 
 The registration --print-install gives each agent follows.
