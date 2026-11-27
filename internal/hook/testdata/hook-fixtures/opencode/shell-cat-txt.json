@@ -1,0 +1,8 @@
+{
+	"tool": "shell",
+	"args": {
+		"command": "cat notes.txt"
+	},
+	"cwd": "/private/tmp/mdnav-fx",
+	"sessionID": "ses_de21dac30ffed2oKC5h4oBzsT4"
+}

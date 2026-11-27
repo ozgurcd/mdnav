@@ -162,41 +162,65 @@ $ mdnav sub D4 'per lane' 'per host' internal/nav/testdata
 
 ## Agent hook
 
-`mdnav hook` is a Claude Code PreToolUse hook that makes coding agents use
-mdnav for Markdown. It reads the hook JSON on standard input and denies, with
-the mdnav command to run instead:
+`mdnav hook` is a PreToolUse hook that makes coding agents use mdnav for
+Markdown. `--agent claude|codex|opencode|agy` (default `claude`) picks the
+agent: a read layer per agent turns its input into one common event, the
+rules below judge it, and a write layer per agent answers in that agent's
+format. An unknown agent exits 2. An agent whose format has no recorded
+fixtures yet exits 2 with `no fixture-backed format for <agent>`; `claude`,
+`codex`, `opencode` and `agy` (including the Antigravity CLI's `edit_file` and `write_file`) are fixture-backed today. It denies, with the mdnav command to
+run instead:
 
-- Bash commands that read a `.md` or `.markdown` file (`cat`, `head`, `tail`,
+- shell commands that read a `.md` or `.markdown` file (`cat`, `head`, `tail`,
   `less`, `more`, `nl`, `sed`, `awk`, `cut`, `perl`), search one (`grep`,
   `rg`, `ag`, `git grep` on a Markdown file, glob, `--include`, `-g`, `-t md`,
   or a recursive search of a directory that holds Markdown) or write an
   existing one (`sed -i`, `perl -i`, `tee`, `>`, `>>`, `>|`, `&>`, `cp`, `mv`,
   `install`, `dd of=`, `truncate`), including inside `$(...)`, `bash -c`,
   `find -exec` and `xargs`;
-- Edit and MultiEdit of an existing Markdown file, and Write over one. The
+- edit and multi-edit of an existing Markdown file, and write over one. The
   denial gives the exact `mdnav sub` commands when the edit maps to them,
-  checked with a dry run first.
+  checked with a dry run first;
+- `apply_patch` (Codex, opencode) that updates an existing Markdown file, adds
+  one over an existing file or moves a file onto one.
 
 It allows counts (`grep -c`, `wc`, output piped to `wc`), checksums, `stat`,
 `ls`, `find` listings, `git diff`, `git show`, `git log`, Markdown names that
-appear only in quoted text or here-document data, creating a new Markdown
-file, mdnav itself, and every path that is not Markdown. A command carrying
-`# mdnav-cannot: <specific reason>` (three words or more) passes.
+appear only in quoted text or here-document data, creating or deleting a
+Markdown file, mdnav itself, and every path that is not Markdown. A command
+carrying `# mdnav-cannot: <specific reason>` (three words or more) passes. A
+shell or write call whose input cannot be read is denied, naming the tool; an
+unknown read-only tool passes.
 
 `MDNAV_HOOK_MODE=warn` (the default) allows every call and logs what would be
 denied; `deny` denies. `MDNAV_CANNOT_LOG=FILE` appends one tab-separated line
-per escape and per warn-mode denial: time, cwd, reason, command.
-`mdnav hook --selftest` runs the hook's decision table and runs each command a
-denial names, as written, in a scratch fixture.
+per escape and per warn-mode denial: time, cwd, reason, command, agent.
 
-Register it in Claude Code settings:
+`mdnav hook --record DIR` writes each raw input to `DIR/<agent>-<time>.json`
+(file 0600, directory 0700; file content cut to 4 KiB, environment values
+dropped, token-like strings redacted) and allows the call.
+The recordings become fixtures in `<fixtures>/<agent>/`, each with a
+`<name>.want` file holding `<verdict> <tool_kind>`. `mdnav hook --selftest
+[--fixtures DIR]` runs the decision table for every agent, running each
+command a denial names in a scratch fixture, then replays the fixtures.
+`mdnav hook --write-fixture DIR` writes the tree to record in.
+
+`mdnav hook --print-install --agent X` prints agent X's complete mdnav
+registration, in warn mode logging to `~/.local/state/mdnav/X-mdnav-cannot.log`. opencode 2 runs no command
+hooks, so for opencode it prints `mdnav-guard.js`, a plugin to redirect into
+`~/.config/opencode/plugins/`.
+`mdnav hook --check-install --agent X [--json]` reads only X's hook
+registration and reports the mdnav guard per tool group as registered, missing
+or different (exit 0, 1; 2 when it cannot read). nuntius lanes use the owner's
+agent config, so this covers them too. `mdnav hook --help` prints every
+agent's registration. For Claude Code, in short:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
-      {"matcher": "Bash", "hooks": [{"type": "command", "command": "mdnav hook"}]},
-      {"matcher": "Edit|Write|MultiEdit", "hooks": [{"type": "command", "command": "mdnav hook"}]}
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "mdnav hook --agent claude"}]},
+      {"matcher": "Edit|Write|MultiEdit", "hooks": [{"type": "command", "command": "mdnav hook --agent claude"}]}
     ]
   }
 }

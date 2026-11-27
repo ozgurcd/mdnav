@@ -1,0 +1,19 @@
+{
+	"conversationId": "2a027e94-8d1c-4371-b9a6-b80d36f0b325",
+	"cwd": "/tmp/mdnav-fx",
+	"hookEventName": "PreToolUse",
+	"modelName": "gemini-4-neon-medium",
+	"stepIdx": 11,
+	"toolCall": {
+		"args": {
+			"CommandLine": "echo \"- item\" >> README.md",
+			"WaitMsBeforeAsync": 5000,
+			"toolSummary": "Append item to README.md"
+		},
+		"id": "call_8292591751891267766",
+		"name": "run_command"
+	},
+	"workspacePaths": [
+		"/tmp/mdnav-fx"
+	]
+}

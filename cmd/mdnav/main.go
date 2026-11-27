@@ -33,7 +33,7 @@ Usage:
   mdnav status <id> [paths...] [--full] [--limit N] [--json]
   mdnav ids [paths...] [--pattern NAME] [--limit N] [--json]
   mdnav version [--json]          (also: mdnav --version)
-  mdnav hook [--selftest]         Claude Code PreToolUse hook (mdnav hook --help)
+  mdnav hook [--agent A] [...]     agent PreToolUse hook (mdnav hook --help)
 
 Edit (one block, addressed like get or as path:line; writes unless --dry-run):
   mdnav sub <target> <old> <new> [paths...] [--expect H]       replace the one occurrence of <old>

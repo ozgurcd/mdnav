@@ -1,0 +1,10 @@
+{
+	"tool": "edit",
+	"args": {
+		"path": "main.go",
+		"oldString": "package main",
+		"newString": "// test\npackage main"
+	},
+	"cwd": "/private/tmp/mdnav-fx",
+	"sessionID": "ses_de21dac30ffed2oKC5h4oBzsT4"
+}

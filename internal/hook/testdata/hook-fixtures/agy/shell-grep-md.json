@@ -1,0 +1,19 @@
+{
+	"conversationId": "2a027e94-8d1c-4371-b9a6-b80d36f0b325",
+	"cwd": "/tmp/mdnav-fx",
+	"hookEventName": "PreToolUse",
+	"modelName": "gemini-4-neon-medium",
+	"stepIdx": 4,
+	"toolCall": {
+		"args": {
+			"CommandLine": "grep -n Setup docs/guide.md",
+			"WaitMsBeforeAsync": 5000,
+			"toolSummary": "Search Setup in docs/guide.md"
+		},
+		"id": "call_18157156036261341514",
+		"name": "run_command"
+	},
+	"workspacePaths": [
+		"/tmp/mdnav-fx"
+	]
+}

@@ -1,0 +1,10 @@
+{
+	"tool": "edit",
+	"args": {
+		"path": "README.md",
+		"oldString": "See the guide.",
+		"newString": "Read the guide."
+	},
+	"cwd": "/private/tmp/mdnav-fx",
+	"sessionID": "ses_de21dac30ffed2oKC5h4oBzsT4"
+}

@@ -173,19 +173,22 @@ func TestRunEditExitCodes(t *testing.T) {
 	}
 }
 
-// TestHook runs the hook's decision table: each row's verdict, and for each
-// denial the mdnav command it names, run as written in a fresh fixture.
+// TestHook runs the hook's decision table for each agent a row names: each
+// verdict, and for each denial the mdnav command it names, run as written
+// in a fresh fixture.
 func TestHook(t *testing.T) {
 	for _, c := range hook.Cases {
-		t.Run(c.Name, func(t *testing.T) {
-			dir := t.TempDir()
-			if err := hook.WriteFixture(dir); err != nil {
-				t.Fatal(err)
-			}
-			t.Chdir(dir)
-			if err := hook.Check(c, dir, run); err != nil {
-				t.Fatal(err)
-			}
-		})
+		for _, agent := range c.Runs() {
+			t.Run(agent+"/"+c.Name, func(t *testing.T) {
+				dir := t.TempDir()
+				if err := hook.WriteFixture(dir); err != nil {
+					t.Fatal(err)
+				}
+				t.Chdir(dir)
+				if err := hook.Check(c, agent, dir, run); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
 	}
 }

@@ -1,0 +1,19 @@
+{
+	"conversationId": "2e1379cf-87fa-465e-9b01-0846015eae6f",
+	"cwd": "/tmp/mdnav-fx",
+	"hookEventName": "PreToolUse",
+	"modelName": "gemini-4-neon-medium",
+	"stepIdx": 8,
+	"toolCall": {
+		"args": {
+			"Path": "/tmp/mdnav-fx/docs/guide.md",
+			"Replacement": "## Install\n\nInstall the tool with make install.\nRun it -> done.\n\n| Name | Value |\n| --- | --- |\n| Alpha | two |",
+			"Target": "## Setup\n\nInstall the tool with make install.\nRun it -> done.\n\n| Name | Value |\n| --- | --- |\n| Alpha | one |"
+		},
+		"id": "call_17312529470199340957",
+		"name": "edit_file"
+	},
+	"workspacePaths": [
+		"/tmp/mdnav-fx"
+	]
+}

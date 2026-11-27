@@ -164,8 +164,10 @@ func editTemplates(file string) string {
 		"  mdnav apply EDITS.json   (several edits to one file, all or nothing; --from - reads standard input)\n"
 }
 
-// pair is one old/new text replacement.
+// pair is one old/new text replacement. Path is set when a multi-file
+// edit names each edit's file.
 type pair struct {
+	Path     string
 	Old, New string
 	All      bool
 }
