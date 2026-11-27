@@ -234,13 +234,10 @@ const goldenOpencode = `// mdnav-guard: makes opencode agents use mdnav for Mark
 // Written by: mdnav hook --print-install --agent opencode
 // Install:    mdnav hook --print-install --agent opencode > /h/.config/opencode/plugins/mdnav-guard.js
 // Check:      mdnav hook --check-install --agent opencode
-// mdnav has no opencode fixtures yet, so it records each call in
-// /h/.local/state/mdnav/record and allows it. Those recordings become the
-// fixtures; then install this file again.
 import { spawnSync } from "node:child_process";
 
 const MDNAV = "mdnav";
-const ARGV = ["hook", "--agent", "opencode", "--record", "/h/.local/state/mdnav/record"];
+const ARGV = ["hook", "--agent", "opencode"];
 const ENV = {MDNAV_HOOK_MODE: "warn", MDNAV_CANNOT_LOG: "/h/.local/state/mdnav/opencode-mdnav-cannot.log"};
 // The tools mdnav judges; every other tool passes without a call.
 const TOOLS = new Set(["shell", "bash", "edit", "write", "multiedit", "patch", "apply_patch"]);

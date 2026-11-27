@@ -23,7 +23,7 @@ Usage:
 
 AGENT is claude (default), codex, opencode or agy. An agent whose format has
 no recorded fixtures yet is refused: exit 2, "no fixture-backed format for
-<agent>". Fixture-backed now: claude.
+<agent>". Fixture-backed now: claude, opencode.
 
 It denies shell commands that read (cat, head, tail, less, more, nl, sed, awk),
 search (grep, rg, ag, git grep) or write (sed -i, perl -i, tee, >, >>, >|, &>,

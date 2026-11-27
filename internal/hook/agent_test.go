@@ -158,7 +158,7 @@ func TestMainCLI(t *testing.T) {
 		{"unknown flag", []string{"--nope"}, bash, 2, "unknown argument"},
 		{"default claude", nil, bash, 0, ""},
 		{"codex refused", []string{"--agent=codex"}, bash, 2, "no fixture-backed format for codex"},
-		{"opencode refused", []string{"--agent", "opencode"}, `{"tool":"bash","args":{"command":"ls"}}`, 2, "no fixture-backed format for opencode"},
+		{"opencode judged", []string{"--agent", "opencode"}, `{"tool":"shell","args":{"command":"ls"},"cwd":"/w"}`, 0, ""},
 		{"agy refused", []string{"--agent", "agy"}, `{}`, 2, "no fixture-backed format for agy"},
 		{"agy records", []string{"--agent", "agy", "--record", rec}, `{"toolCall":{"id":"1","content":"` + long + `"},"cwd":"/w"}`, 0, ""},
 		{"record dir open to others", []string{"--record", open}, bash, 1, "open to other users"},
