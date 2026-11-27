@@ -3,4 +3,4 @@
 package buildinfo
 
 // Version is the version of the next or current release, vMAJOR.MINOR.PATCH.
-const Version = "v0.1.2"
+const Version = "v0.1.3"
