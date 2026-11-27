@@ -157,7 +157,7 @@ func TestCheckInstall(t *testing.T) {
 			[]string{"shell  mdnav    different", "edit   mdnav    different"}},
 		{"opencode not installed", AgentOpencode, nil, 1, []string{"shell  mdnav    missing"}},
 		{"codex hooks.json", AgentCodex, map[string]string{".codex/hooks.json": `{"hooks":{"PreToolUse":[{"matcher":"^Bash$","hooks":[{"type":"command","command":` + quote(mdnavFor("codex")) + `}]},{"matcher":"^apply_patch$","hooks":[{"type":"command","command":` + quote(mdnavFor("codex")) + `}]}]}}`}, 0,
-			[]string{"shell  mdnav    registered", "edit   mdnav    registered"}},
+			[]string{"config.toml + " + home + "/.codex/hooks.json", "shell  mdnav    registered", "edit   mdnav    registered"}},
 		{"codex hooks.json unreadable", AgentCodex, map[string]string{".codex/hooks.json": `{`}, 2, []string{"cannot read"}},
 		{"agy registered", AgentAgy, map[string]string{".gemini/config/hooks.json": `{"$schema":"x","other":{"PreToolUse":[]},"mdnav":{"PreToolUse":[{"matcher":"run_command","hooks":[{"command":` + quote(mdnavFor("agy")) + `}]},{"matcher":"write_to_file|replace_file_content|multi_replace_file_content","hooks":[{"command":` + quote(mdnavFor("agy")) + `}]}]}}`}, 0,
 			[]string{"shell  mdnav    registered", "edit   mdnav    registered"}},

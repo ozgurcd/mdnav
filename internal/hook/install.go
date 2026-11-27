@@ -301,12 +301,14 @@ func CheckInstall(w io.Writer, agent string, asJSON bool, getenv func(string) st
 	}
 	if err == nil && agent == AgentCodex {
 		// Codex loads hooks.json beside config.toml too.
-		raw, rerr := os.ReadFile(filepath.Join(filepath.Dir(report.Config), "hooks.json"))
+		hooksJSON := filepath.Join(filepath.Dir(report.Config), "hooks.json")
+		raw, rerr := os.ReadFile(hooksJSON)
 		switch {
 		case errors.Is(rerr, fs.ErrNotExist):
 		case rerr != nil:
 			err = rerr
 		default:
+			report.Config += " + " + hooksJSON
 			var more []entry
 			if more, err = claudeEntries(raw); err == nil {
 				entries = append(entries, more...)
