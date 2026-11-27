@@ -332,3 +332,12 @@ func TestMultiEditPaths(t *testing.T) {
 		}
 	}
 }
+
+// TestCommittedFixtures replays the recordings committed under
+// testdata/hook-fixtures (one folder per agent, see ReplayFixtures).
+func TestCommittedFixtures(t *testing.T) {
+	var out bytes.Buffer
+	if _, err := ReplayFixtures(&out, filepath.Join("testdata", "hook-fixtures")); err != nil {
+		t.Fatalf("%v\n%s", err, out.String())
+	}
+}
