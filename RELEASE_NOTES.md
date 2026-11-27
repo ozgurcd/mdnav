@@ -2,6 +2,25 @@
 
 Release changes are recorded under their exact version, newest first.
 
+## v0.1.3 — 2026-11-27
+
+`mdnav hook` now guards Codex, opencode and Antigravity as well as Claude Code.
+
+- `mdnav hook --agent claude|codex|opencode|agy` reads each agent's hook
+  input and answers in its format; the Markdown rules are the same for all.
+  Every agent is backed by calls recorded in real sessions.
+- `mdnav hook --print-install --agent X` prints the complete registration
+  (warn mode, logging to `~/.local/state/mdnav/X-mdnav-cannot.log`), naming
+  the mdnav binary by absolute path. For opencode 2 it prints `mdnav-guard.js`,
+  a plugin for `~/.config/opencode/plugins/`.
+- `mdnav hook --check-install --agent X [--json]` reports whether the mdnav
+  guard is registered, missing or different.
+- Antigravity CLI's `edit_file` and `write_file` are guarded, besides the
+  documented `replace_file_content`, `multi_replace_file_content` and
+  `write_to_file`.
+- `mdnav hook --record DIR` (opt-in) writes raw hook inputs for new fixtures;
+  `--selftest --fixtures DIR` replays them.
+
 ## v0.1.2 — 2026-11-26
 
 mdnav now ships an agent hook that sends coding agents to mdnav for Markdown.
