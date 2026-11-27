@@ -9,6 +9,30 @@ import (
 	"testing"
 )
 
+// TestBrewLink keeps registrations off Homebrew's versioned folders, which
+// the next upgrade removes.
+func TestBrewLink(t *testing.T) {
+	prefix := t.TempDir()
+	bin := filepath.Join(prefix, "Caskroom", "mdnav", "0.1.3", "mdnav")
+	os.MkdirAll(filepath.Dir(bin), 0o755)
+	os.WriteFile(bin, []byte("x"), 0o755)
+	if got := brewLink(bin); got != bin {
+		t.Fatalf("no link: got %s, want %s", got, bin)
+	}
+	link := filepath.Join(prefix, "bin", "mdnav")
+	os.MkdirAll(filepath.Dir(link), 0o755)
+	if err := os.Symlink(bin, link); err != nil {
+		t.Fatal(err)
+	}
+	if got := brewLink(bin); got != link {
+		t.Fatalf("got %s, want %s", got, link)
+	}
+	other := filepath.Join(prefix, "go", "bin", "mdnav")
+	if got := brewLink(other); got != other {
+		t.Fatalf("non-Homebrew path changed: %s", got)
+	}
+}
+
 // mdnavIn is the mdnav guard command an install gives agent in home.
 func mdnavIn(home, agent string) string {
 	return "env MDNAV_HOOK_MODE=warn MDNAV_CANNOT_LOG=" + home + "/.local/state/mdnav/" + agent + "-mdnav-cannot.log mdnav hook --agent " + agent

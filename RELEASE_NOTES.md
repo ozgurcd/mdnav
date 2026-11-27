@@ -2,6 +2,12 @@
 
 Release changes are recorded under their exact version, newest first.
 
+## v0.1.4 — 2026-11-27
+
+- `mdnav hook --print-install` names `/opt/homebrew/bin/mdnav` for a Homebrew
+  install instead of the versioned Caskroom path, which `brew upgrade` removes.
+  Reinstall registrations printed by v0.1.3.
+
 ## v0.1.3 — 2026-11-27
 
 `mdnav hook` now guards Codex, opencode and Antigravity as well as Claude Code.
