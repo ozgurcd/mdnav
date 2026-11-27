@@ -52,14 +52,32 @@ func mdnavGuardCommand(agent string, getenv func(string) string) string {
 // absolute path, so an older mdnav earlier on PATH is never the one called.
 var mdnavBinary = executablePath
 
+// executablePath keeps symlinks: Homebrew's /opt/homebrew/bin/mdnav links
+// into a versioned Caskroom folder that the next upgrade removes.
 func executablePath() string {
 	if p, err := os.Executable(); err == nil {
-		if r, err := filepath.EvalSymlinks(p); err == nil {
-			return r
-		}
-		return p
+		return brewLink(p)
 	}
 	return "mdnav"
+}
+
+// brewLink returns <prefix>/bin/<name> for a binary inside a Homebrew
+// <prefix>/Caskroom or <prefix>/Cellar folder when that link resolves to the
+// same file, and p otherwise.
+func brewLink(p string) string {
+	for _, dir := range []string{"/Caskroom/", "/Cellar/"} {
+		i := strings.Index(p, dir)
+		if i < 0 {
+			continue
+		}
+		link := filepath.Join(p[:i], "bin", filepath.Base(p))
+		a, err1 := filepath.EvalSymlinks(link)
+		b, err2 := filepath.EvalSymlinks(p)
+		if err1 == nil && err2 == nil && a == b {
+			return link
+		}
+	}
+	return p
 }
 
 // groups returns agent's mdnav registration for shell and edit calls. agy
